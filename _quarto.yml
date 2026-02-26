@@ -5,7 +5,7 @@ project:
 website:
   title: "Multi-Metabolite Signatures of exposure"
   site-url: "https://nestanyol.github.io/MMS/"
-  repo-url: ""
+  repo-url: "https://github.com/nestanyol/MMS"
   repo-actions: [edit, issue]
   navbar:
     left:
@@ -31,8 +31,8 @@ website:
           #   href: notebooks/05_validation.qmd
           # - text: "6. Interpretation"
           #   href: notebooks/06_interpretation.qmd
-      - text: "Appendix"
-        href: reports/appendix.qmd
+      # - text: "Appendix"
+      #   href: reports/appendix.qmd
 
   sidebar:
     style: "floating"
@@ -49,7 +49,7 @@ website:
       - section: "Reports"
         contents:
           - reports/final_report.qmd
-          - reports/appendix.qmd
+          # - reports/appendix.qmd
 
 format:
   html:
