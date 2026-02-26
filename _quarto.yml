@@ -4,7 +4,7 @@ project:
 
 website:
   title: "Multi-Metabolite Signatures of exposure"
-  site-url: "https://github.com/nestanyol/MMS/"
+  site-url: "https://nestanyol.github.io/MMS/"
   repo-url: ""
   repo-actions: [edit, issue]
   navbar:
