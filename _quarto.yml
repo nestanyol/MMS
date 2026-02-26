@@ -72,5 +72,5 @@ execute:
   message: false
   freeze: auto
 
-bibliography: references/references.bib
-csl: references/csl.csl
+# bibliography: references/references.bib
+# # csl: references/csl.csl
