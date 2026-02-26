@@ -1,0 +1,76 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Multi-Metabolite Signatures of exposure"
+  site-url: ""
+  repo-url: ""
+  repo-actions: [edit, issue]
+  navbar:
+    left:
+      - text: "Home"
+        href: index.qmd
+      - text: "Project"
+        menu:
+          - text: "Background & aims"
+            href: about.qmd
+          - text: "Final report"
+            href: reports/final_report.qmd
+      - text: "Analysis"
+        menu:
+          - text: "1. Data overview"
+            href: notebooks/01_data_overview.qmd
+          # - text: "2. Preprocessing"
+          #   href: notebooks/02_preprocessing.qmd
+          # - text: "3. Feature engineering"
+          #   href: notebooks/03_feature_engineering.qmd
+          # - text: "4. Modeling"
+          #   href: notebooks/04_modeling.qmd
+          # - text: "5. Validation"
+          #   href: notebooks/05_validation.qmd
+          # - text: "6. Interpretation"
+          #   href: notebooks/06_interpretation.qmd
+      - text: "Appendix"
+        href: reports/appendix.qmd
+
+  sidebar:
+    style: "floating"
+    search: true
+    contents:
+      - section: "Analysis workflow"
+        contents:
+          - notebooks/01_data_overview.qmd
+          # - notebooks/02_preprocessing.qmd
+          # - notebooks/03_feature_engineering.qmd
+          # - notebooks/04_modeling.qmd
+          # - notebooks/05_validation.qmd
+          # - notebooks/06_interpretation.qmd
+      - section: "Reports"
+        contents:
+          - reports/final_report.qmd
+          - reports/appendix.qmd
+
+format:
+  html:
+    theme:
+      - cosmo
+      - styles/custom.scss
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    highlight-style: github
+    include-in-header:
+      - text: |
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+execute:
+  echo: true
+  warning: false
+  message: false
+  freeze: auto
+
+bibliography: references/references.bib
+csl: references/csl.csl
