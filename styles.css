@@ -1,0 +1,10 @@
+/* css styles */
+p {
+  text-align: justify
+}
+
+
+/* Remove site title from sidebar */
+.sidebar-header {
+  display: none;
+}
