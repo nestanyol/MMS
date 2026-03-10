@@ -1,11 +1,26 @@
 ---
-title: "MMS"
+title: "Welcome"
+format: html
+engine: knitr
+css: styles.css
 ---
 
-This is a Quarto website.
+This covers the use of multi-metabolite signatures (MMS) as an advanced analytical approach to leverage metabolomics data to identify and
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+synthesize metabolite patterns that reflect specific exogenous exposures, specifically diet composition. It specifically targets on potential applications of MMSs as composite biomarkers to target and monitor dietary chronic disease prevention strategies.
 
-```{r}
-1 + 1
-```
+To understand methodologies for multi-metabolite singatures developing and facilitate a conceptual and practical framework to develop them
+
+identify biomarkers consisting of multiple metabolites, associated to exposure outcomes, specifically dietary scores.
+
+Work competences:
+
+-   Learn MMS methodologies.
+
+Complementary competences:
+
+-   Hands-on experience in coding within a reproducible framework.
+
+<!-- -->
+
+-   Practice on quarto website publishing

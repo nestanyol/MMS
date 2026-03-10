@@ -1,0 +1,194 @@
+---
+title: "Scientific context and scope"
+---
+
+# Metabolomics in nutritional epidemiology
+
+Metabolomics measures small molecules in biofluids and tissues and provides a high-dimensional readout of endogenous metabolism plus the exogenous inputs (e.g., diet, drugs, pollutants, microbiome-derived metabolites). In nutritional epidemiology, it is increasingly used to: (i) improve dietary exposure assessment, (ii) identify mechanistic pathways linking diet to disease, and (iii) support metabolic phenotyping relevant for precision prevention.
+
+An additional motivation is that self-reported diet instruments (e.g., FFQs, recalls) introduce substantial measurement error because they rely on memory, social desirability, and imperfect reporting (including under- or over-reporting), which can attenuate diet–disease associations and bias inference. Metabolomics has the potential to objectively measure intake, leveraging and/or substituting traditional assessment.
+
+Key study designs in the field:
+
+-   Controlled dietary interventions: strongest for causal attribution and biomarker discovery.
+
+-   Prospective cohorts: strong for disease prediction and mediation pathways (but confounding and reverse causation must be addressed).
+
+-   Nested case-control / case-cohort: efficient for costly metabolomics profiling.
+
+Common analytic challenges:
+
+-   High dimensionality, correlation structures, batch effects, data missingness, and metabolite identification uncertainty.
+
+-   Confounding and reverse causality (especially in cross-sectional settings).
+
+-   Reproducibility and portability across platforms and labs (harmonization).
+
+## Exposure biomarkers
+
+Metabolites can reflect:
+
+-   Short-term intake (hours-days): for instance, polyphenol metabolites after intake of products rich in these compounds).
+
+-   Intake patterns (weeks-months): stable patterns that can reflect dietary patterns and macronutrient balance.
+
+A widely used approach is to identify **food intake biomarkers** from metabolomics-derived molecules and evaluate them on: plausibility and specificity to food, dose-response, intake kinetics, and robustness across populations and platforms. A common practical framework has been to:
+
+1.  Use convential dietary instruments (FFQ or questionnaires) to estimate intake or pattern scores,
+2.  Use metabolomics to identify biomarkers or signatures correlated with those exposures,
+3.  Validate biomarkers in interventions or independent cohorts,
+4.  Use biomarkers to improve the measurement, adherence monitoring and mechanistic inference,
+5.  Use these biomarkers in epidemiological analyses to investigater associations with clinical or biological outcomes.
+
+But single metabolites are influenced by multiple factors such as host genetics and physiology, microbiome, physical activity, medication, and disease state, among others. Metabolites are not specific and reflect heterogeneity, therefore there is need for objective biomarkers that capture metabolic adaptation.
+
+## Diet and disease research
+
+Metabolomics can support diet research in different ways:
+
+-   **Exposure validation and calibration**\
+    Metabolites can help detect questionnaires misreporting, provide calibration signals alongside classical biomarkers and assess adherence to dietary patterns.
+
+-   **Pathway discovery and mechanistic interpretation**\
+    Metabolomics can map metabolism shifts (e.g., amino acid metabolism, lipid remodeling, bile acids, microbiome-linked pathways, inflammatory pathways) relevant to disease-related outcomes.
+
+-   **Pattern recognition**\
+    Rather than single nutrients, metabolomics can characterize dietary patterns (e.g., Mediterranean Diet, dietary indices) as multivariate signatures.
+
+Metabolic adaptation to diet is shaped by multiple factors, such as baseline physiology and environment, which motivates multi-marker approaches rather than single metabolites to better represent and summarize the metabolic state.
+
+## Precision nutrition
+
+Precision nutrition aims to deliver dietary guidance tailored to individuals or stratified subgroups based on biological variability (i.e., genetics or epigenetics, lifestyle, exposome, microbiome, sex, ancestry or psychosocial factors). Because this integrates multiple data layers, it often requires advanced statistical learning approaches. Machine learning approaches could be a way to facilitate this prediction and biomarker discovery in the personalized nutrition context.
+
+In this field, metabolomics provides a tool to estimate intake or pattern scores, characterize individuals metabolic state, identify metabolic subtypes responding differently to diets (metabotypes), monitor adherence and biological response and stratify subgroups of individuals who benefit most from specific dietary strategies.
+
+# Multi-metabolite signatures
+
+A **multi-metabolite signature (MMS)** is a weighted combination of multiple metabolites selected and combined to represent an exposure, phenotype, or biological process (e.g., metabolome-derived diet score).
+
+In practice, MMS are usually derived from:
+
+-   supervised prediction of an exposure (diet score, nutrient intake, pattern adherence),
+
+-   supervised prediction of outcomes (T2D, CVD), interpreted as biological risk signatures,
+
+-   usupervised methods to identify metabolic patterns without a predifined outcome.
+
+## Advantages over single metabolites
+
+While single metabolites often lack of specificity and can be noisy, MMS can easily summarize the metabolic complexity and provide a more comprehensive picture of a metabolic state.
+
+Some advantages MMS offer:
+
+-   increase signal-to-noise by aggregating correlated features,
+
+-   better capture complex biological relations and pathways,
+
+-   improve predictive performance and robustness,
+
+-   offer a scalar score for downstream epidemiological analyses.
+
+# Methodological landscape for MMS construction
+
+## Penalized regression
+
+Metabolomics data typically contain large number of highly correlated predictors relative to the number of observations (high number of metabolites are measured in a often much smaller sample size). This situation is often referred as high dimensionality of the data (p\>\>n) and supposes a challange for conventional regression approaches.
+
+Standard multiple regression models often perform poorly under these conditions due to **overfitting** (where the model captures noise instead of the true biological signal), **multicollinearity** (as metabolites often belong to shared biochemical pathays and therefore have strong correlations), **unstable coefficient estimates** (where small changes in the data can lead to large changes in the model parameters).
+
+The Penalized regression methods address these challenges by introducing a regularization penalty to the regression model. This penalty constrains the magnitude of the regression coefficients, shrinking them toward zero (i.e., the model is forced to keep the coefficients small, and therefore less influential). As a result, the model becomes more stable, less prone to overfitting and better predicts high-dimensional settings.
+
+In the context of multi-metabolite signature construction, penalized regression allows the identification of **metabolite combinations that jointly predict a dietary exposure or biological phenotype**, while accounting for correlations among metabolites.
+
+The general form of penalized regression extends the ordinary least squares objective function by adding a penalty term:
+
+![](/images/penalizedregression.jpg){fig-align="center" width="201" height="56"}
+
+where 𝛌 is a tuning parameter controlling the strength of the penalty and P(𝛃) defines the type of regularization applied to the regression coefficients. The value of 𝛌 is typically determined using **cross-validation**, which balances model complexity and predictive performance.
+
+Some best practices when performing penalized regressions are to:
+
+1.  Tune hyperparameters via cross-validation,
+2.  Standardize predictors,
+3.  Utilize external validation (or separate cohort or time-split) when possible.
+
+### LASSO
+
+The Least Absolut Shrinkage and Selection Operator (LASSO) applies an **L1 penalty** to the regression coefficients. This shrinks coefficients to zero, performing **variable selection**.
+
+LASSO is particularly useful when the goal is to identify a **sparse set of predictive metabolites**, highlighting those most strongly associated with the exposure or outcome.
+
+⚠️In metabolite datasets where many metabolites are strongly associated, LASSO may arbitrarily select one metabolite from a correlated group while excluding others that might be biologically relevant.
+
+### Elastic Net
+
+Elastic net combines **L1 (LASSO) and L2 (ridge) penalties**, allowing to retain groups of correlated predictors while still performing regularization. This approach is particularly well suited for metabolomics data because metabolites within the same biochemical pathway often exhibit strong correlations.
+
+Elastic Net provides a balance between **feature selection and coefficient stabilization**, and has become one of the most widely used methods for constructing multi-metabolite signatures in nutritional metabolomics studies.
+
+### **Ridge Regression**
+
+Ridge regression applies an **L2 penalty**, shrinking coefficients toward zero but not forcing them exactly to zero. As a result, all predictors remain in the model but with reduced magnitude.
+
+This approach is particularly useful when many metabolites contribute small but meaningful signals to a biological process. In such situations, ridge regression can produce more stable and reproducible metabolite signatures, especially when predictors are highly correlated. This is the preferred approach if you want to keep all metabolite predictors in the signature, instead of performing a variable selection.
+
+## Dimension reduction
+
+### PCA 
+
+Unsupervised, compresses metabolite space into orthogonal components capturing variance.
+
+PLS / PLS-DA
+
+Machine learning
+
+Random forest
+
+Gradient boosting
+
+Support vector machines
+
+-   <!-- -->
+
+    -   Unsupervised; compresses metabolite space into orthogonal components capturing variance.
+
+    <!-- -->
+
+    -   Useful for visualization, batch detection, and as inputs to predictive models, but PCs may not align with the exposure of interest.
+
+-   
+
+-   
+
+    -   
+
+    <!-- -->
+
+    -   PLS / PLS-DA
+
+-   Supervised (PLS-DA for classification); finds components that maximize covariance with outcome/exposure.
+
+<!-- -->
+
+-   Risk of overfitting without strict validation; interpretation depends on stability of loadings.
+
+-   Machine learning
+
+```         
+-    Random forest
+
+-    Gradient boosting
+
+-   Support vector machines
+```
+
+-   Scoring frameworks
+
+```         
+-    Weighted scores
+
+-   Metabolite risk scores
+
+-   Index construction
+```

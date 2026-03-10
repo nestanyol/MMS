@@ -1,7 +1,7 @@
 {
-  "hash": "f2200b341ae2a38772693d32c494d877",
+  "hash": "45605ecd0de4f85d5db54f6e0dfd2fa8",
   "result": {
-    "markdown": "---\ntitle: \"MMS\"\n---\n\n\nThis is a Quarto website.\n\nTo learn more about Quarto websites visit <https://quarto.org/docs/websites>.\n\n\n::: {.cell}\n\n```{.r .cell-code}\n1 + 1\n```\n\n::: {.cell-output .cell-output-stdout}\n```\n[1] 2\n```\n:::\n:::\n",
+    "markdown": "---\ntitle: \"Welcome\"\nformat: html\nengine: knitr\ncss: styles.css\n---\n\n\nThis covers the use of multi-metabolite signatures (MMS) as an advanced analytical approach to leverage metabolomics data to identify and\n\nsynthesize metabolite patterns that reflect specific exogenous exposures, specifically diet composition. It specifically targets on potential applications of MMSs as composite biomarkers to target and monitor dietary chronic disease prevention strategies.\n\nTo understand methodologies for multi-metabolite singatures developing and facilitate a conceptual and practical framework to develop them\n\nidentify biomarkers consisting of multiple metabolites, associated to exposure outcomes, specifically dietary scores.\n\nWork competences:\n\n-   Learn MMS methodologies.\n\nComplementary competences:\n\n-   Hands-on experience in coding within a reproducible framework.\n\n<!-- -->\n\n-   Practice on quarto website publishing\n",
     "supporting": [],
     "filters": [
       "rmarkdown/pagebreak.lua"

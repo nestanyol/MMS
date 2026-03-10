@@ -1,0 +1,71 @@
+# Data import
+
+data structure
+
+metabolomics platform
+
+exposure variables
+
+outcome definitions
+
+# Data preprocessing
+
+Typical metabolomics steps:
+
+missing value handling
+
+normalization
+
+transformation (log scaling)
+
+batch correction
+
+scaling (z-score)
+
+# Study design & sample splitting
+
+training vs test dataset
+
+cross-validation
+
+internal validation
+
+avoiding overfitting
+
+# Building the MMS
+
+feature selection
+
+model training
+
+score construction
+
+LASSO metabolite selection
+
+elastic net models
+
+weighted metabolite scores
+
+# Model evaluation
+
+R²
+
+RMSE
+
+ROC / AUC
+
+calibration
+
+Also include:
+
+permutation testing
+
+cross-validation results
+
+# Robustness and reproducibility
+
+sensitivity analyses
+
+stability of metabolite selection
+
+reproducibility across folds
