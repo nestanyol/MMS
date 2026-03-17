@@ -1,71 +1,859 @@
-# Data import
+---
+title: "Analytical workflow"
+---
 
-data structure
+# Data import {#data-import}
 
-metabolomics platform
+This page provides a generic example workflow for constructing a multi-metabolite signature (MMS). The code below is adapted from a real project, but variable names have been made generic so the same structure can be reused in other studies.
 
-exposure variables
+The examples are intentionally shown as templates rather than executable project code.
 
-outcome definitions
+## Data structure {#data-structure}
 
-# Data preprocessing
+At minimum, an MMS workflow usually requires:
+
+- one analysis dataset containing participant identifiers, metabolomics features, exposures, and covariates
+- one dataset defining the held-out or external evaluation population
+- optional metadata linking feature IDs to metabolite names
+
+```{r, eval=FALSE}
+# Main analytical dataset
+analysis_df
+
+# Dataset defining the evaluation subset or external outcome sample
+evaluation_registry_df
+
+# Optional metabolite annotation table
+feature_annotation_df
+```
+
+```{r, eval=FALSE}
+# Example helper to simulate a simple metabolomics dataset
+simulate_example_data <- function(n = 2000, p = 12) {
+  metabolite_matrix <- replicate(p, rnorm(n, mean = 5, sd = 2)) %>%
+    as.data.frame()
+
+  colnames(metabolite_matrix) <- paste0("metabolite_", seq_len(p))
+
+  tibble::tibble(
+    participant_id = seq_len(n),
+    exposure_variable = scales::rescale(rnorm(n), to = c(0, 10)),
+    age = round(rnorm(n, mean = 55, sd = 8)),
+    sex = sample(c("F", "M"), n, replace = TRUE)
+  ) %>%
+    dplyr::bind_cols(metabolite_matrix)
+}
+```
+
+## Metabolomics platform {#metabolomics-platform}
+
+The metabolomics matrix should be clearly separated from participant-level metadata. In practice, this means defining which columns correspond to metabolite predictors and which columns correspond to exposures, covariates, and outcomes.
+
+If you want a synthetic example for method development or teaching, a small simulation helper can be useful.
+
+```{r, eval=FALSE}
+# Example: keep a vector with the metabolite feature columns
+feature_columns <- colnames(analysis_df)[feature_start_col:ncol(analysis_df)]
+
+# Convert to model matrix
+feature_matrix <- as.matrix(analysis_df[, feature_columns])
+
+# Optional: synthetic example data
+# analysis_df <- simulate_example_data()
+```
+
+## Exposure variables {#exposure-variables}
+
+The target exposure can be a single variable or several related variables if multiple signatures are built in parallel.
+
+```{r, eval=FALSE}
+# Example target exposures for parallel MMS construction
+target_outcomes <- c(
+  exposure_a = "exposure_a_residual",
+  exposure_b = "exposure_b_residual",
+  exposure_c = "exposure_c_residual",
+  exposure_d = "exposure_d_residual"
+)
+```
+
+## Outcome definitions {#outcome-definitions}
+
+If the MMS will later be related to disease, mortality, or another endpoint, it is helpful to define those downstream datasets early so the training and testing workflow is explicit.
+
+```{r, eval=FALSE}
+evaluation_ids <- evaluation_registry_df %>%
+  dplyr::pull(participant_id)
+```
+
+# Data preprocessing {#data-preprocessing}
+
+Before fitting MMS models, the data typically undergo residualization, cleaning, and standardization steps.
 
 Typical metabolomics steps:
 
-missing value handling
+## Missing value handling {#missing-value-handling}
 
-normalization
+Missing metabolite values should be addressed before model fitting, using a strategy aligned with the platform and study design.
 
-transformation (log scaling)
+A compact preprocessing helper can wrap missingness filtering, imputation, log transformation, and normalization in one step.
 
-batch correction
+```{r, eval=FALSE}
+# Placeholder example
+analysis_df <- analysis_df %>%
+  mutate(across(all_of(feature_columns), ~ ifelse(is.na(.x), median(.x, na.rm = TRUE), .x)))
 
-scaling (z-score)
+# Example reusable preprocessing helper
+preprocess_metabolomics_data <- function(raw_data, id_col, target_col, feature_start_col,
+                                         cutoff_columns = 0.2, cutoff_rows = 0.2,
+                                         imputation = "median") {
+  clean_data <- raw_data %>%
+    tidyr::drop_na({{ target_col }}) %>%
+    dplyr::distinct() %>%
+    janitor::remove_empty("cols", cutoff = cutoff_columns) %>%
+    janitor::remove_empty("rows", cutoff = cutoff_rows)
 
-# Study design & sample splitting
+  variables <- clean_data[, seq_len(feature_start_col - 1)]
+  metabolite_data <- clean_data[, feature_start_col:ncol(clean_data)]
 
-training vs test dataset
+  selected_data <- dplyr::bind_cols(
+    dplyr::select(variables, {{ id_col }}, {{ target_col }}),
+    metabolite_data
+  )
 
-cross-validation
+  extra_covariates <- variables %>%
+    dplyr::select(-{{ id_col }}, -{{ target_col }})
 
-internal validation
+  preprocess_recipe <- recipes::recipe(~ ., data = selected_data) %>%
+    recipes::update_role({{ id_col }}, new_role = "id") %>%
+    recipes::update_role({{ target_col }}, new_role = "outcome")
 
-avoiding overfitting
+  preprocess_recipe <- if (imputation == "knn") {
+    preprocess_recipe %>% recipes::step_impute_knn(recipes::all_predictors())
+  } else if (imputation == "lower") {
+    preprocess_recipe %>% recipes::step_impute_lower(recipes::all_predictors())
+  } else if (imputation == "mean") {
+    preprocess_recipe %>% recipes::step_impute_mean(recipes::all_predictors())
+  } else {
+    preprocess_recipe %>% recipes::step_impute_median(recipes::all_predictors())
+  }
 
-# Building the MMS
+  processed_data <- preprocess_recipe %>%
+    recipes::step_log(recipes::all_predictors()) %>%
+    recipes::step_normalize(recipes::all_predictors()) %>%
+    recipes::prep(training = selected_data) %>%
+    recipes::juice() %>%
+    dplyr::rename(id = {{ id_col }}, target = {{ target_col }})
 
-feature selection
+  dplyr::bind_cols(extra_covariates, processed_data)
+}
+```
 
-model training
+## Normalization {#normalization}
 
-score construction
+Normalization may be applied at the metabolite-feature level depending on the platform and preprocessing pipeline used upstream.
 
-LASSO metabolite selection
+In the helper function above, normalization is performed through a `recipes` workflow after imputation and log transformation.
 
-elastic net models
+```{r, eval=FALSE}
+# Placeholder example for already selected feature columns
+analysis_df <- analysis_df %>%
+  mutate(across(all_of(feature_columns), ~ .x / sd(.x, na.rm = TRUE)))
+```
 
-weighted metabolite scores
+## Transformation (log scaling) {#transformation-log-scaling}
 
-# Model evaluation
+Log transformation is often used to reduce skewness and stabilize variance.
 
-R²
+This is also built into the helper function above.
 
-RMSE
+```{r, eval=FALSE}
+analysis_df <- analysis_df %>%
+  mutate(across(all_of(feature_columns), log1p))
+```
 
-ROC / AUC
+## Batch correction {#batch-correction}
 
-calibration
+If samples were processed in multiple analytical batches, batch correction should occur before signature construction.
+
+```{r, eval=FALSE}
+# Placeholder: use the batch variable defined in your project
+# analysis_df <- correct_batch_effects(analysis_df, batch_var = "batch_id", features = feature_columns)
+```
+
+## Scaling (z-score) {#scaling-z-score}
+
+Standardizing predictors is especially important for penalized regression models.
+
+Again, the preprocessing helper already standardizes predictors after transformation, which is a useful template if you want a single entry point for data wrangling.
+
+```{r, eval=FALSE}
+analysis_df <- analysis_df %>%
+  mutate(across(all_of(feature_columns), scale))
+```
+
+# Study design & sample splitting {#study-design-sample-splitting}
+
+This section shows how to define training and testing populations in a reusable way.
+
+## Training vs test dataset {#training-vs-test-dataset}
+
+In the original project, the training dataset excluded participants reserved for downstream disease analyses. Below is the same logic written generically.
+
+A small helper can standardize train/test partitioning after preprocessing.
+
+```{r, eval=FALSE}
+# Participants reserved for external or downstream evaluation
+evaluation_ids <- evaluation_registry_df %>%
+  dplyr::pull(participant_id)
+
+# Training population
+signature_training_df <- analysis_df %>%
+  filter(!participant_id %in% evaluation_ids)
+
+# Testing or external evaluation population
+signature_testing_df <- analysis_df %>%
+  filter(participant_id %in% evaluation_ids)
+
+# Example helper-based split
+split_signature_data <- function(clean_data, target_col, training_split = 0.7) {
+  split_obj <- rsample::initial_split(
+    clean_data,
+    prop = training_split,
+    strata = {{ target_col }}
+  )
+
+  list(
+    split_data = split_obj,
+    train_data = rsample::training(split_obj),
+    test_data = rsample::testing(split_obj)
+  )
+}
+
+# split_obj <- split_signature_data(clean_data = analysis_df, target_col = target, training_split = 0.7)
+# signature_training_df <- split_obj$train_data
+# signature_testing_df <- split_obj$test_data
+```
+
+## Cross-validation {#cross-validation}
+
+Cross-validation is used to tune the regularization parameter and estimate the stability of the model.
+
+If you want a more packaged training interface, a helper can wrap repeated cross-validation with `caret::train()`.
+
+```{r, eval=FALSE}
+set.seed(123)
+cv_folds <- rsample::vfold_cv(signature_training_df, v = 10)
+
+# Example helper for repeated cross-validation
+cross_validated_model <- function(train_data, model = "glmnet", nfolds = 10,
+                                  nrepeats = 5, tune_length = 10) {
+  control <- caret::trainControl(
+    method = "repeatedcv",
+    number = nfolds,
+    repeats = nrepeats,
+    search = "random",
+    verboseIter = TRUE
+  )
+
+  set.seed(42)
+  caret::train(
+    target ~ .,
+    data = train_data,
+    method = model,
+    preProcess = c("center", "scale"),
+    tuneLength = tune_length,
+    trControl = control
+  )
+}
+```
+
+## Internal validation {#internal-validation}
+
+Internal validation can be performed by predicting the held-out fold or a pre-specified testing subset and then quantifying how well the MMS reproduces the target exposure.
+
+```{r, eval=FALSE}
+# Predictor matrix for training
+training_feature_matrix <- as.matrix(signature_training_df[, feature_columns])
+
+# Predictor matrix for testing
+testing_feature_matrix <- as.matrix(signature_testing_df[, feature_columns])
+```
+
+## Avoiding overfitting {#avoiding-overfitting}
+
+Key strategies include:
+
+- separating tuning from final model fitting
+- evaluating performance in a held-out dataset
+- reporting coefficient stability across folds
+- using sensitivity analyses for downstream associations
+
+# Building the MMS {#building-the-mms}
+
+This section contains a generic template based on the original analysis: residualize the target exposure, tune a penalized model, fit the signature, and generate participant-level scores.
+
+## Feature selection {#feature-selection}
+
+If the exposure of interest should first be adjusted for major confounders or correlated dietary components, residualization can be used before signature training.
+
+For a single-metabolite screening step before multivariable signature building, a helper can fit metabolite-wise models, apply multiple testing correction, and return both the filtered results and residuals.
+
+```{r, eval=FALSE}
+# Example: residualize multiple target exposures against shared covariates
+residual_model_specs <- list(
+  exposure_a = exposure_a ~ total_energy + covariate_1 + covariate_2 + covariate_3,
+  exposure_b = exposure_b ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a,
+  exposure_c = exposure_c ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a + exposure_b,
+  exposure_d = exposure_d ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a + exposure_b
+)
+
+residual_models <- purrr::map(
+  residual_model_specs,
+  ~ lm(.x, data = analysis_df)
+)
+
+analysis_df <- analysis_df %>%
+  mutate(
+    exposure_a_residual = residuals(residual_models$exposure_a),
+    exposure_b_residual = residuals(residual_models$exposure_b),
+    exposure_c_residual = residuals(residual_models$exposure_c),
+    exposure_d_residual = residuals(residual_models$exposure_d)
+  )
+
+# Example single-metabolite screening helper
+single_metabolite_analysis <- function(data, train_data, exposure_feature,
+                                       feature_start_col, covariates = NULL,
+                                       threshold = 0.01, correction = NULL) {
+  metabolite_columns <- colnames(data)[feature_start_col:ncol(data)]
+  features <- c(exposure_feature, covariates)
+
+  fit_single_model <- function(metabolite_name, predictors, dataset) {
+    model_formula <- stats::reformulate(predictors, response = metabolite_name)
+    stats::lm(model_formula, data = dataset) %>%
+      broom::tidy() %>%
+      dplyr::mutate(yvar = metabolite_name, .before = dplyr::everything())
+  }
+
+  extract_residuals <- function(metabolite_name, predictors, dataset) {
+    model_formula <- stats::reformulate(predictors, response = metabolite_name)
+    stats::lm(model_formula, data = dataset) %>%
+      residuals() %>%
+      tibble::tibble(value = .)
+  }
+
+  results <- metabolite_columns %>%
+    furrr::future_map(~ fit_single_model(.x, features, dataset = train_data)) %>%
+    purrr::list_rbind(names_to = "model_id")
+
+  residuals_df <- metabolite_columns %>%
+    furrr::future_map(~ extract_residuals(.x, features, dataset = data)) %>%
+    purrr::list_cbind()
+
+  colnames(residuals_df) <- metabolite_columns
+
+  filtered_results <- if (length(correction)) {
+    results %>%
+      dplyr::mutate(p_value_corrected = stats::p.adjust(p.value, method = correction)) %>%
+      dplyr::filter(stringr::str_detect(term, "target")) %>%
+      dplyr::filter(p_value_corrected < threshold) %>%
+      dplyr::arrange(p_value_corrected)
+  } else {
+    results %>%
+      dplyr::filter(stringr::str_detect(term, "target")) %>%
+      dplyr::filter(p.value < threshold) %>%
+      dplyr::arrange(p.value)
+  }
+
+  list(
+    results = filtered_results,
+    residuals = residuals_df %>% dplyr::select(filtered_results$yvar)
+  )
+}
+```
+
+## Model training {#model-training}
+
+The original project used ridge regression (`alpha = 0`) to derive signatures for multiple related exposures. Below is a generic template for tuning lambda, fitting the models, and storing the results.
+
+A set of reusable training helpers can simplify switching between regression and machine-learning models.
+
+```{r, eval=FALSE}
+target_outcomes <- c(
+  exposure_a = "exposure_a_residual",
+  exposure_b = "exposure_b_residual",
+  exposure_c = "exposure_c_residual",
+  exposure_d = "exposure_d_residual"
+)
+
+training_feature_matrix <- as.matrix(signature_training_df[, feature_columns])
+
+get_best_lambda <- function(outcome_name) {
+  response_vector <- signature_training_df[[outcome_name]]
+  set.seed(123)
+  cv_fit <- glmnet::cv.glmnet(
+    x = training_feature_matrix,
+    y = response_vector,
+    alpha = 0,
+    nfolds = 10
+  )
+  cv_fit$lambda.min
+}
+
+best_lambdas <- sapply(target_outcomes, get_best_lambda)
+
+final_signature_models <- purrr::imap(target_outcomes, function(outcome_name, signature_name) {
+  glmnet::glmnet(
+    x = training_feature_matrix,
+    y = signature_training_df[[outcome_name]],
+    alpha = 0,
+    lambda = best_lambdas[[signature_name]]
+  )
+})
+
+# Example helper for elastic-net style linear regression
+train_linear_signature <- function(train_data) {
+  recipe_obj <- recipes::recipe(target ~ ., data = train_data) %>%
+    recipes::step_rm(id)
+
+  model_spec <- parsnip::linear_reg(penalty = 0.5, mixture = 0.5) %>%
+    parsnip::set_engine("glmnet")
+
+  workflows::workflow() %>%
+    workflows::add_recipe(recipe_obj) %>%
+    workflows::add_model(model_spec) %>%
+    parsnip::fit(data = train_data) %>%
+    purrr::pluck("fit")
+}
+
+# Example helper for random forest training
+train_random_forest_signature <- function(train_data, mode = "regression") {
+  recipe_obj <- recipes::recipe(target ~ ., data = train_data) %>%
+    recipes::step_rm(id)
+
+  model_spec <- parsnip::rand_forest() %>%
+    parsnip::set_engine("ranger", importance = "impurity") %>%
+    parsnip::set_mode(mode)
+
+  workflows::workflow() %>%
+    workflows::add_recipe(recipe_obj) %>%
+    workflows::add_model(model_spec) %>%
+    parsnip::fit(data = train_data) %>%
+    purrr::pluck("fit")
+}
+
+# Example helper for k-nearest-neighbor training
+train_knn_signature <- function(train_data, mode = "regression") {
+  neighbors_n <- min(length(unique(train_data$target)), 10)
+
+  recipe_obj <- recipes::recipe(target ~ ., data = train_data) %>%
+    recipes::step_rm(id)
+
+  model_spec <- parsnip::nearest_neighbor(
+    neighbors = neighbors_n,
+    weight_func = "triangular"
+  ) %>%
+    parsnip::set_engine("kknn") %>%
+    parsnip::set_mode(mode)
+
+  workflows::workflow() %>%
+    workflows::add_recipe(recipe_obj) %>%
+    workflows::add_model(model_spec) %>%
+    parsnip::fit(data = train_data) %>%
+    purrr::pluck("fit")
+}
+```
+
+## Score construction {#score-construction}
+
+After the final models are fitted, the participant-level MMS scores can be generated for the testing subset or for the full dataset.
+
+A score-calculation helper can turn model coefficients into a sample-level weighted score after filtering to non-zero metabolite coefficients.
+
+```{r, eval=FALSE}
+testing_feature_matrix <- as.matrix(signature_testing_df[, feature_columns])
+
+predicted_signature_scores <- purrr::imap(
+  final_signature_models,
+  ~ as.vector(predict(.x, newx = testing_feature_matrix, s = best_lambdas[[.y]]))
+)
+
+signature_testing_results <- dplyr::bind_cols(
+  signature_testing_df,
+  as.data.frame(predicted_signature_scores)
+)
+
+# Example coefficient-based score calculation helper
+calculate_signature_score <- function(ids, df, coefficients) {
+  coefficient_df <- data.frame(
+    metabolite = rownames(coefficients),
+    coefficient = as.numeric(coefficients)
+  )
+
+  coefficient_df <- coefficient_df %>%
+    dplyr::filter(metabolite != "(Intercept)") %>%
+    dplyr::filter(metabolite != "id") %>%
+    dplyr::filter(coefficient != 0)
+
+  selected_features <- coefficient_df$metabolite
+
+  weighted_score_matrix <- data.frame(
+    matrix(NA, nrow = nrow(df), ncol = length(selected_features))
+  )
+
+  for (i in seq_along(selected_features)) {
+    feature_name <- selected_features[i]
+    feature_position <- which(coefficient_df$metabolite == feature_name)
+
+    weighted_score_matrix[, i] <- df %>%
+      dplyr::select(dplyr::all_of(feature_name)) %>%
+      dplyr::mutate(dplyr::across(dplyr::everything(), ~ .x * coefficient_df[feature_position, "coefficient"])) %>%
+      dplyr::pull(1)
+  }
+
+  colnames(weighted_score_matrix) <- selected_features
+
+  dplyr::bind_cols(ids, weighted_score_matrix) %>%
+    dplyr::mutate(total_score = rowSums(dplyr::across(dplyr::all_of(selected_features))))
+}
+```
+
+## LASSO metabolite selection {#lasso-metabolite-selection}
+
+If the goal is sparse feature selection rather than retaining all metabolite predictors, the same workflow can be used with `alpha = 1`.
+
+```{r, eval=FALSE}
+lasso_fit <- glmnet::cv.glmnet(
+  x = training_feature_matrix,
+  y = signature_training_df[["exposure_a_residual"]],
+  alpha = 1,
+  nfolds = 10
+)
+```
+
+## Elastic net models {#elastic-net-models}
+
+Elastic net is useful when correlated metabolites should be partially retained while still allowing shrinkage and some variable selection.
+
+```{r, eval=FALSE}
+elastic_net_fit <- glmnet::cv.glmnet(
+  x = training_feature_matrix,
+  y = signature_training_df[["exposure_a_residual"]],
+  alpha = 0.5,
+  nfolds = 10
+)
+```
+
+## Weighted metabolite scores {#weighted-metabolite-scores}
+
+The predicted values from the penalized model become the MMS score. These can then be standardized for interpretation per standard deviation.
+
+```{r, eval=FALSE}
+full_feature_matrix <- as.matrix(analysis_df[, feature_columns])
+
+all_signature_scores <- purrr::imap(
+  final_signature_models,
+  ~ as.vector(predict(.x, newx = full_feature_matrix, s = best_lambdas[[.y]]))
+)
+
+analysis_df <- dplyr::bind_cols(
+  analysis_df,
+  purrr::set_names(as.data.frame(all_signature_scores), paste0("signature_score_", names(all_signature_scores)))
+) %>%
+  mutate(across(starts_with("signature_score_"), scale, .names = "{.col}_sd"))
+```
+
+# Model evaluation {#model-evaluation}
+
+The original code evaluated whether the predicted MMS score reproduced the residualized target exposure in the held-out population.
+
+## R2 {#r2}
+
+One simple validation step is to regress the standardized residualized exposure on the standardized MMS score and extract `R^2`.
+
+Reusable testing helpers can return predictions and core regression metrics from fitted models.
+
+```{r, eval=FALSE}
+evaluation_model_specs <- list(
+  exposure_a = list(y = "exposure_a_residual_sd", x = "signature_score_exposure_a_sd"),
+  exposure_b = list(y = "exposure_b_residual_sd", x = "signature_score_exposure_b_sd")
+)
+
+evaluation_models <- purrr::map(evaluation_model_specs, function(spec) {
+  lm(
+    formula = as.formula(paste(spec$y, "~", spec$x)),
+    data = signature_testing_results
+  )
+})
+
+evaluation_results <- purrr::imap_dfr(evaluation_models, function(fit, signature_name) {
+  slope <- broom::tidy(fit, conf.int = TRUE) %>%
+    dplyr::filter(term != "(Intercept)")
+  fit_summary <- broom::glance(fit)
+
+  slope %>%
+    mutate(
+      signature = signature_name,
+      r_squared = fit_summary$r.squared,
+      adj_r_sq = fit_summary$adj.r.squared
+    )
+})
+```
+
+## RMSE {#rmse}
+
+RMSE can be reported alongside `R^2` if prediction error is of interest.
+
+These metrics can also be returned directly by reusable testing helpers, which is convenient when comparing several model families.
+
+```{r, eval=FALSE}
+rmse_value <- yardstick::rmse_vec(
+  truth = signature_testing_results$exposure_a_residual_sd,
+  estimate = signature_testing_results$signature_score_exposure_a_sd
+)
+
+# Example regression testing helpers
+test_linear_signature <- function(model, test_data) {
+  model_fit <- model$fit
+
+  predictions <- stats::predict(model_fit, new_data = test_data) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = .pred) %>%
+    dplyr::bind_cols(test_data)
+
+  model_coefficients <- broom::tidy(model_fit)
+  rmse_value <- caret::RMSE(predictions$predicted, predictions$target)
+
+  list(
+    prediction = predictions,
+    model_coefficients = model_coefficients,
+    rmse_value = rmse_value
+  )
+}
+
+test_random_forest_regression <- function(model, test_data) {
+  model_fit <- model$fit
+
+  predictions <- stats::predict(model_fit, new_data = test_data) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = .pred) %>%
+    dplyr::bind_cols(test_data)
+
+  list(
+    prediction = predictions,
+    model_importance = vip::vi(model_fit),
+    r_squared = caret::R2(predictions$predicted, predictions$target),
+    rmse_value = caret::RMSE(predictions$predicted, predictions$target)
+  )
+}
+
+test_knn_regression <- function(model, test_data) {
+  model_fit <- model$fit
+
+  predictions <- stats::predict(model_fit, new_data = test_data) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = .pred) %>%
+    dplyr::bind_cols(test_data)
+
+  list(
+    prediction = predictions,
+    r_squared = caret::R2(predictions$predicted, predictions$target),
+    rmse_value = caret::RMSE(predictions$predicted, predictions$target)
+  )
+}
+
+test_cross_validated_model <- function(model, test_data, type = "regression") {
+  predictions <- predict(model, newdata = test_data) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = value) %>%
+    dplyr::bind_cols(test_data)
+
+  if (type == "regression") {
+    list(
+      df = predictions,
+      RMSE = caret::RMSE(predictions$predicted, predictions$target)
+    )
+  } else {
+    list(
+      df = predictions,
+      confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
+    )
+  }
+}
+```
+
+## ROC / AUC {#roc-auc}
+
+If the signature is evaluated against a binary downstream outcome, ROC curves and AUC can be added.
+
+For classification settings, testing helpers can provide confusion-matrix-based evaluation.
+
+```{r, eval=FALSE}
+roc_auc_result <- yardstick::roc_auc(
+  data = downstream_analysis_df,
+  truth = outcome_case_status,
+  .pred = signature_score_exposure_a_sd
+)
+
+# Example classification testing helpers
+test_random_forest_classification <- function(model, test_data) {
+  model_fit <- model$fit
+
+  predictions <- stats::predict(model_fit, new_data = test_data) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = .pred_class) %>%
+    dplyr::bind_cols(test_data)
+
+  list(
+    prediction = predictions,
+    model_importance = vip::vi(model_fit),
+    confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
+  )
+}
+
+test_knn_classification <- function(model, test_data) {
+  model_fit <- model$fit
+
+  predictions <- dplyr::bind_cols(
+    stats::predict(model_fit, new_data = test_data),
+    stats::predict(model_fit, new_data = test_data, type = "prob")
+  ) %>%
+    dplyr::as_tibble() %>%
+    dplyr::rename(predicted = .pred_class) %>%
+    dplyr::bind_cols(test_data)
+
+  list(
+    prediction = predictions,
+    confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
+  )
+}
+```
+
+## Calibration {#calibration}
+
+Calibration is useful when the MMS is interpreted as a predictive score rather than only as an exposure biomarker.
+
+```{r, eval=FALSE}
+# Placeholder for calibration workflow
+# calibration_df <- compute_calibration(data = downstream_analysis_df, score = "signature_score_exposure_a_sd")
+```
 
 Also include:
 
-permutation testing
+## Permutation testing {#permutation-testing}
 
-cross-validation results
+Permutation tests can be used when assessing whether predictive performance exceeds what would be expected by chance.
 
-# Robustness and reproducibility
+```{r, eval=FALSE}
+# Placeholder for permutation-based validation
+# permuted_results <- run_permutation_test(training_feature_matrix, signature_training_df$exposure_a_residual)
+```
 
-sensitivity analyses
+## Cross-validation results {#cross-validation-results}
 
-stability of metabolite selection
+Cross-validation outputs can be summarized by storing fold-specific coefficients and then computing medians and interquartile ranges.
 
-reproducibility across folds
+If you prefer a more abstract interface, the cross-validation helpers above can be used as a lightweight wrapper pair for repeated cross-validated training and testing.
+
+```{r, eval=FALSE}
+coefficient_summary_list <- list()
+
+for (signature_name in names(target_outcomes)) {
+  outcome_name <- target_outcomes[[signature_name]]
+  lambda_value <- best_lambdas[[signature_name]]
+  fold_coefficients <- vector("list", length = length(cv_folds$splits))
+
+  for (i in seq_along(cv_folds$splits)) {
+    fold_training_df <- rsample::analysis(cv_folds$splits[[i]])
+    x_fold <- as.matrix(fold_training_df[, feature_columns])
+    y_fold <- fold_training_df[[outcome_name]]
+
+    fold_fit <- glmnet::glmnet(x = x_fold, y = y_fold, alpha = 0, lambda = lambda_value)
+    fold_coefficients[[i]] <- as.matrix(coef(fold_fit))
+  }
+
+  coefficient_df <- do.call(cbind, fold_coefficients)
+  coefficient_df <- coefficient_df[rownames(coefficient_df) != "(Intercept)", , drop = FALSE]
+
+  coefficient_summary_list[[signature_name]] <- as.data.frame(coefficient_df) %>%
+    mutate(
+      median = apply(.[, seq_len(ncol(.))], 1, quantile, probs = 0.5),
+      q1 = apply(.[, seq_len(ncol(.))], 1, quantile, probs = 0.25),
+      q3 = apply(.[, seq_len(ncol(.))], 1, quantile, probs = 0.75),
+      feature_id = rownames(.)
+    ) %>%
+    left_join(feature_annotation_df, by = "feature_id")
+}
+```
+
+# Robustness and reproducibility {#robustness-and-reproducibility}
+
+Once the MMS scores are created, they can be carried into downstream epidemiological models and sensitivity analyses.
+
+## Sensitivity analyses {#sensitivity-analyses}
+
+The original project tested whether MMS-outcome associations were robust to alternative adjustment sets and interaction terms. A generic version is shown below for conditional logistic regression, but the same principle applies to other models.
+
+```{r, eval=FALSE}
+downstream_model_formulas <- list(
+  "Base-adjusted" = ~ covariate_1 + covariate_2 + strata(matching_set_id),
+  "Fully-adjusted" = ~ covariate_1 + covariate_2 + covariate_3 + covariate_4 + strata(matching_set_id),
+  "Sensitivity-adjusted" = ~ covariate_1 + covariate_2 + covariate_3 + covariate_4 + sensitivity_covariate + strata(matching_set_id)
+)
+
+fit_conditional_model <- function(data, signature_name, model_label, rhs_formula) {
+  predictor_name <- paste0("signature_score_", signature_name, "_sd")
+  rhs_string <- as.character(rhs_formula)[2]
+  full_formula <- as.formula(paste0("binary_outcome ~ ", predictor_name, " + ", rhs_string))
+
+  survival::clogit(full_formula, data = data, method = "efron", robust = TRUE) %>%
+    broom::tidy(conf.int = TRUE) %>%
+    dplyr::filter(term == predictor_name)
+}
+```
+
+This is the point in the workflow where the MMS score leaves the pure prediction setting and becomes an epidemiological exposure variable for downstream association models.
+
+## Stability of metabolite selection {#stability-of-metabolite-selection}
+
+Coefficient stability across cross-validation folds helps identify which metabolites consistently contribute to the signature.
+
+```{r, eval=FALSE}
+top_features_table <- dplyr::bind_rows(
+  lapply(names(coefficient_summary_list), function(signature_name) {
+    coefficient_summary_list[[signature_name]] %>%
+      mutate(signature = signature_name)
+  })
+) %>%
+  group_by(signature) %>%
+  arrange(desc(abs(median)), .by_group = TRUE) %>%
+  slice_head(n = 30)
+```
+
+## Reproducibility across folds {#reproducibility-across-folds}
+
+For transparent reporting, it is useful to export coefficient summaries, downstream association tables, and figures derived from the same standardized workflow.
+
+```{r, eval=FALSE}
+readr::write_csv(top_features_table, "results/signature_top_features.csv")
+readr::write_csv(evaluation_results, "results/signature_evaluation_results.csv")
+```
+
+This generic structure can be adapted to:
+
+- dietary exposures
+- clinical biomarkers
+- disease risk signatures
+- survival outcomes
+- interaction and subgroup analyses
+
+The key idea is to keep the workflow modular: preprocess, split data, fit the MMS, validate the score, and then carry the standardized score into downstream epidemiological models.
+
+Some reusable helper patterns that fit naturally into this workflow are:
+
+- simulation helpers for teaching and examples
+- preprocessing wrappers
+- train/test splitting helpers
+- single-metabolite screening helpers
+- model-training helpers for elastic net, random forest, and k-nearest neighbors
+- score-calculation helpers
+- regression and classification testing helpers

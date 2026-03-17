@@ -13,33 +13,153 @@ website:
     style: "floating"
     search: true
     contents:
-      - section: "Overview"
+      - text: "Hello!"
+        href: index.qmd
+      - section: "Scientific context and scope"
         contents:
-          - notebooks/intro.qmd
-          - notebooks/methods.qmd
+          - text: "Metabolomics in nutritional epidemiology"
+            href: notebooks/intro.qmd#metabolomics-in-nutritional-epidemiology
+            contents:
+              - text: "Exposure biomarkers"
+                href: notebooks/intro.qmd#exposure-biomarkers
+              - text: "Diet and disease research"
+                href: notebooks/intro.qmd#diet-and-disease-research
+              - text: "Precision nutrition"
+                href: notebooks/intro.qmd#precision-nutrition
+          - text: "Multi-metabolite signatures"
+            href: notebooks/intro.qmd#multi-metabolite-signatures
+            contents:
+              - text: "Advantages over single metabolites"
+                href: notebooks/intro.qmd#advantages-over-single-metabolites
+          - text: "Methodological landscape for MMS construction"
+            href: notebooks/intro.qmd#methodological-landscape-for-mms-construction
+            contents:
+              - text: "Penalized regression"
+                href: notebooks/intro.qmd#penalized-regression
+                contents:
+                  - text: "LASSO"
+                    href: notebooks/intro.qmd#lasso
+                  - text: "Elastic Net"
+                    href: notebooks/intro.qmd#elastic-net
+                  - text: "Ridge Regression"
+                    href: notebooks/intro.qmd#ridge-regression
+              - text: "Dimension reduction"
+                href: notebooks/intro.qmd#dimension-reduction
+                contents:
+                  - text: "PCA"
+                    href: notebooks/intro.qmd#pca
+                  - text: "PLS / PLS-DA"
+                    href: notebooks/intro.qmd#pls--pls-da
+                  - text: "Machine learning"
+                    href: notebooks/intro.qmd#machine-learning
+                    contents:
+                      - text: "Random forest"
+                        href: notebooks/intro.qmd#random-forest
+                      - text: "Gradient boosting"
+                        href: notebooks/intro.qmd#gradient-boosting
+                      - text: "Support vector machines"
+                        href: notebooks/intro.qmd#support-vector-machines
+              - text: "Scoring frameworks"
+                href: notebooks/intro.qmd#scoring-frameworks
+                contents:
+                  - text: "Weighted scores"
+                    href: notebooks/intro.qmd#weighted-scores
+                  - text: "Metabolite risk scores"
+                    href: notebooks/intro.qmd#metabolite-risk-scores
+                  - text: "Index construction"
+                    href: notebooks/intro.qmd#index-construction
+                  - text: "Reporting and reproducibility expectations"
+                    href: notebooks/intro.qmd#reporting-and-reproducibility-expectations
       - section: "Analytical workflow"
         contents:
-          - notebooks/workflow.qmd
-          - notebooks/feature_selection.qmd
-          - notebooks/feature_selection.qmd
+          - text: "Data import"
+            href: notebooks/workflow.qmd#data-import
+            contents:
+              - text: "Data structure"
+                href: notebooks/workflow.qmd#data-structure
+              - text: "Metabolomics platform"
+                href: notebooks/workflow.qmd#metabolomics-platform
+              - text: "Exposure variables"
+                href: notebooks/workflow.qmd#exposure-variables
+              - text: "Outcome definitions"
+                href: notebooks/workflow.qmd#outcome-definitions
+          - text: "Data preprocessing"
+            href: notebooks/workflow.qmd#data-preprocessing
+            contents:
+              - text: "Missing value handling"
+                href: notebooks/workflow.qmd#missing-value-handling
+              - text: "Normalization"
+                href: notebooks/workflow.qmd#normalization
+              - text: "Transformation (log scaling)"
+                href: notebooks/workflow.qmd#transformation-log-scaling
+              - text: "Batch correction"
+                href: notebooks/workflow.qmd#batch-correction
+              - text: "Scaling (z-score)"
+                href: notebooks/workflow.qmd#scaling-z-score
+          - text: "Study design & sample splitting"
+            href: notebooks/workflow.qmd#study-design-sample-splitting
+            contents:
+              - text: "Training vs test dataset"
+                href: notebooks/workflow.qmd#training-vs-test-dataset
+              - text: "Cross-validation"
+                href: notebooks/workflow.qmd#cross-validation
+              - text: "Internal validation"
+                href: notebooks/workflow.qmd#internal-validation
+              - text: "Avoiding overfitting"
+                href: notebooks/workflow.qmd#avoiding-overfitting
+          - text: "Building the MMS"
+            href: notebooks/workflow.qmd#building-the-mms
+            contents:
+              - text: "Feature selection"
+                href: notebooks/workflow.qmd#feature-selection
+              - text: "Model training"
+                href: notebooks/workflow.qmd#model-training
+              - text: "Score construction"
+                href: notebooks/workflow.qmd#score-construction
+              - text: "LASSO metabolite selection"
+                href: notebooks/workflow.qmd#lasso-metabolite-selection
+              - text: "Elastic net models"
+                href: notebooks/workflow.qmd#elastic-net-models
+              - text: "Weighted metabolite scores"
+                href: notebooks/workflow.qmd#weighted-metabolite-scores
+          - text: "Model evaluation"
+            href: notebooks/workflow.qmd#model-evaluation
+            contents:
+              - text: "R2"
+                href: notebooks/workflow.qmd#r2
+              - text: "RMSE"
+                href: notebooks/workflow.qmd#rmse
+              - text: "ROC / AUC"
+                href: notebooks/workflow.qmd#roc-auc
+              - text: "Calibration"
+                href: notebooks/workflow.qmd#calibration
+              - text: "Permutation testing"
+                href: notebooks/workflow.qmd#permutation-testing
+              - text: "Cross-validation results"
+                href: notebooks/workflow.qmd#cross-validation-results
+          - text: "Robustness and reproducibility"
+            href: notebooks/workflow.qmd#robustness-and-reproducibility
+            contents:
+              - text: "Sensitivity analyses"
+                href: notebooks/workflow.qmd#sensitivity-analyses
+              - text: "Stability of metabolite selection"
+                href: notebooks/workflow.qmd#stability-of-metabolite-selection
+              - text: "Reproducibility across folds"
+                href: notebooks/workflow.qmd#reproducibility-across-folds
           # - notebooks/02_preprocessing.qmd
           # - notebooks/03_feature_engineering.qmd
           # - notebooks/04_modeling.qmd
           # - notebooks/05_validation.qmd
           # - notebooks/06_interpretation.qmd
-      - section: "Reports"
-        contents:
-          - reports/final_report.qmd
-          # - reports/appendix.qmd
-
 format:
   html:
     theme:
       - cosmo
-      - styles/custom.scss
+    css: styles.css
     toc: true
     toc-depth: 3
-    number-sections: true
+    number-sections: false
+    link-citations: true
     code-fold: true
     code-tools: true
     highlight-style: github
@@ -53,5 +173,4 @@ execute:
   message: false
   freeze: auto
 
-# bibliography: references/references.bib
-# # csl: references/csl.csl
+bibliography: references/references.bib

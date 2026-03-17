@@ -1,5 +1,6 @@
 /* css styles */
-p {
+p,
+li {
   text-align: justify
 }
 
