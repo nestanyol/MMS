@@ -2,48 +2,31 @@
 title: "Analytical workflow"
 ---
 
-# Data import {#data-import}
+This page presents a comprehensive and modular workflow for constructing a multimetabolite signature (MMS), covering all key steps from the raw data preparation to the downstream epidemiological applications. The framework is designed to be adaptable across studies.
 
-This page provides a generic example workflow for constructing a multi-metabolite signature (MMS). The code below is adapted from a real project, but variable names have been made generic so the same structure can be reused in other studies.
+I hope this offers a useful and inspiring starting point for developing your own MMS workflow! 🧪📊✨
 
-The examples are intentionally shown as templates rather than executable project code.
+# Data import and preprocessing {#data-import}
 
 ## Data structure {#data-structure}
 
-At minimum, an MMS workflow usually requires:
+For a supervised MMS approach, the minimum required variables are:
 
-- one analysis dataset containing participant identifiers, metabolomics features, exposures, and covariates
-- one dataset defining the held-out or external evaluation population
-- optional metadata linking feature IDs to metabolite names
+![](/images/data%20structure%20example.png){fig-align="center" fig-cap="Data structure example" width="57%"}
 
-```{r, eval=FALSE}
-# Main analytical dataset
-analysis_df
+-   **subject identifiers**,
 
-# Dataset defining the evaluation subset or external outcome sample
-evaluation_registry_df
+-   **metabolomics features**,
 
-# Optional metabolite annotation table
-feature_annotation_df
-```
+-   at least one **exposure variable**.
 
-```{r, eval=FALSE}
-# Example helper to simulate a simple metabolomics dataset
-simulate_example_data <- function(n = 2000, p = 12) {
-  metabolite_matrix <- replicate(p, rnorm(n, mean = 5, sd = 2)) %>%
-    as.data.frame()
+Additional elements can be included depending on the study design, such as:
 
-  colnames(metabolite_matrix) <- paste0("metabolite_", seq_len(p))
+-   multiple exposures (for parallel signature construction),
 
-  tibble::tibble(
-    participant_id = seq_len(n),
-    exposure_variable = scales::rescale(rnorm(n), to = c(0, 10)),
-    age = round(rnorm(n, mean = 55, sd = 8)),
-    sex = sample(c("F", "M"), n, replace = TRUE)
-  ) %>%
-    dplyr::bind_cols(metabolite_matrix)
-}
-```
+-   covariates for adjustment or residualization,
+
+-   metadata linking feature IDs to metabolite annotations.
 
 ## Metabolomics platform {#metabolomics-platform}
 
@@ -51,7 +34,11 @@ The metabolomics matrix should be clearly separated from participant-level metad
 
 If you want a synthetic example for method development or teaching, a small simulation helper can be useful.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Metabolomics platform"
 # Example: keep a vector with the metabolite feature columns
 feature_columns <- colnames(analysis_df)[feature_start_col:ncol(analysis_df)]
 
@@ -61,12 +48,17 @@ feature_matrix <- as.matrix(analysis_df[, feature_columns])
 # Optional: synthetic example data
 # analysis_df <- simulate_example_data()
 ```
+:::
 
 ## Exposure variables {#exposure-variables}
 
 The target exposure can be a single variable or several related variables if multiple signatures are built in parallel.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Exposure variables"
 # Example target exposures for parallel MMS construction
 target_outcomes <- c(
   exposure_a = "exposure_a_residual",
@@ -75,17 +67,21 @@ target_outcomes <- c(
   exposure_d = "exposure_d_residual"
 )
 ```
+:::
 
 ## Outcome definitions {#outcome-definitions}
 
 If the MMS will later be related to disease, mortality, or another endpoint, it is helpful to define those downstream datasets early so the training and testing workflow is explicit.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Outcome definitions"
 evaluation_ids <- evaluation_registry_df %>%
   dplyr::pull(participant_id)
 ```
-
-# Data preprocessing {#data-preprocessing}
+:::
 
 Before fitting MMS models, the data typically undergo residualization, cleaning, and standardization steps.
 
@@ -97,7 +93,11 @@ Missing metabolite values should be addressed before model fitting, using a stra
 
 A compact preprocessing helper can wrap missingness filtering, imputation, log transformation, and normalization in one step.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Missing value handling"
 # Placeholder example
 analysis_df <- analysis_df %>%
   mutate(across(all_of(feature_columns), ~ ifelse(is.na(.x), median(.x, na.rm = TRUE), .x)))
@@ -147,6 +147,7 @@ preprocess_metabolomics_data <- function(raw_data, id_col, target_col, feature_s
   dplyr::bind_cols(extra_covariates, processed_data)
 }
 ```
+:::
 
 ## Normalization {#normalization}
 
@@ -154,11 +155,16 @@ Normalization may be applied at the metabolite-feature level depending on the pl
 
 In the helper function above, normalization is performed through a `recipes` workflow after imputation and log transformation.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Normalization"
 # Placeholder example for already selected feature columns
 analysis_df <- analysis_df %>%
   mutate(across(all_of(feature_columns), ~ .x / sd(.x, na.rm = TRUE)))
 ```
+:::
 
 ## Transformation (log scaling) {#transformation-log-scaling}
 
@@ -166,19 +172,29 @@ Log transformation is often used to reduce skewness and stabilize variance.
 
 This is also built into the helper function above.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Transformation (log scaling)"
 analysis_df <- analysis_df %>%
   mutate(across(all_of(feature_columns), log1p))
 ```
+:::
 
 ## Batch correction {#batch-correction}
 
 If samples were processed in multiple analytical batches, batch correction should occur before signature construction.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Batch correction"
 # Placeholder: use the batch variable defined in your project
 # analysis_df <- correct_batch_effects(analysis_df, batch_var = "batch_id", features = feature_columns)
 ```
+:::
 
 ## Scaling (z-score) {#scaling-z-score}
 
@@ -186,10 +202,15 @@ Standardizing predictors is especially important for penalized regression models
 
 Again, the preprocessing helper already standardizes predictors after transformation, which is a useful template if you want a single entry point for data wrangling.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Scaling (z-score)"
 analysis_df <- analysis_df %>%
   mutate(across(all_of(feature_columns), scale))
 ```
+:::
 
 # Study design & sample splitting {#study-design-sample-splitting}
 
@@ -197,42 +218,82 @@ This section shows how to define training and testing populations in a reusable 
 
 ## Training vs test dataset {#training-vs-test-dataset}
 
-In the original project, the training dataset excluded participants reserved for downstream disease analyses. Below is the same logic written generically.
+At minimum, an MMS workflow requires both a **training dataset** and a **testing dataset**. These can be obtained in two ways:
 
-A small helper can standardize train/test partitioning after preprocessing.
+-   by using two separate datasets (one for model training and the other for external validation), or by defining subsets of individuals within a single dataset that are reserved for testing. In both cases, the datasets or subsets must contain the same variables and be similarly structured, or
 
+-   by splitting a single dataset into training and testing subsets (e.g., random split).
+
+![](/images/train_test.png){fig-align="center" fig-cap="Training and testing dataset strategies" width="57%"}
+
+::: {.callout-note .callout-code-example}
+## Example code
 ```{r, eval=FALSE}
-# Participants reserved for external or downstream evaluation
-evaluation_ids <- evaluation_registry_df %>%
+#| code-summary: "User-defined training/test individuals"
+#| 
+  # Participants reserved for external or downstream evaluation
+evaluation_ids <- external_registry_df %>%
   dplyr::pull(participant_id)
 
 # Training population
-signature_training_df <- analysis_df %>%
+train_data <- data %>%
   filter(!participant_id %in% evaluation_ids)
 
 # Testing or external evaluation population
-signature_testing_df <- analysis_df %>%
+test_data <- data %>%
   filter(participant_id %in% evaluation_ids)
 
+```
+
+```{r, eval=FALSE}
+#| code-summary: "Random training/test splitting helper"
+
 # Example helper-based split
-split_signature_data <- function(clean_data, target_col, training_split = 0.7) {
-  split_obj <- rsample::initial_split(
-    clean_data,
-    prop = training_split,
-    strata = {{ target_col }}
-  )
+split_dataset <- function(data, training_prop = 0.7, strata = NULL) {
+  split_obj <- if (is.null(strata)) {
+    rsample::initial_split(data, prop = training_prop)
+  } else {
+    rsample::initial_split(data, prop = training_prop, strata = {{ strata }})
+  }
 
   list(
-    split_data = split_obj,
+    split = split_obj,
     train_data = rsample::training(split_obj),
     test_data = rsample::testing(split_obj)
   )
 }
-
-# split_obj <- split_signature_data(clean_data = analysis_df, target_col = target, training_split = 0.7)
-# signature_training_df <- split_obj$train_data
-# signature_testing_df <- split_obj$test_data
 ```
+:::
+
+::: {.callout-note .callout-strata-note collapse="true"}
+## `strata`
+
+This note refers to the optional `strata` argument inside `split_dataset()`.
+
+Stratification helps keep the training and testing sets similar with respect to an important variable, usually the outcome or exposure grouping.This makes model training and evaluation more stable and more comparable. For example:
+
+-   If your outcome is binary and rare, a purely random split might put too few cases in the test set.
+-   If your target has strong class imbalance, stratification preserves roughly the same proportion in both subsets.
+
+Use stratification when:
+-   you have a categorical outcome like case/control
+-   you have strong imbalance between groups
+-   you want both train and test to represent the same population structure
+
+You usually do not need it when:
+-   the dataset is large and well balanced
+-   the outcome is continuous and you are doing a simple random split
+:::
+
+::: {.callout-note .callout-strata-note collapse="true"}
+## `training_prop = 0.7`
+
+This note refers to the optional `training_prop` argument inside `split_dataset()`.
+
+This argument defines the proportion of individuals kept in the training dataset.
+
+If you do not specify it, the default is `0.7`, meaning that 70% of individuals are assigned to the training dataset and the remaining 30% to the testing dataset.
+:::
 
 ## Cross-validation {#cross-validation}
 
@@ -240,7 +301,11 @@ Cross-validation is used to tune the regularization parameter and estimate the s
 
 If you want a more packaged training interface, a helper can wrap repeated cross-validation with `caret::train()`.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Cross-validation"
 set.seed(123)
 cv_folds <- rsample::vfold_cv(signature_training_df, v = 10)
 
@@ -266,27 +331,33 @@ cross_validated_model <- function(train_data, model = "glmnet", nfolds = 10,
   )
 }
 ```
+:::
 
 ## Internal validation {#internal-validation}
 
 Internal validation can be performed by predicting the held-out fold or a pre-specified testing subset and then quantifying how well the MMS reproduces the target exposure.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Internal validation"
 # Predictor matrix for training
 training_feature_matrix <- as.matrix(signature_training_df[, feature_columns])
 
 # Predictor matrix for testing
 testing_feature_matrix <- as.matrix(signature_testing_df[, feature_columns])
 ```
+:::
 
 ## Avoiding overfitting {#avoiding-overfitting}
 
 Key strategies include:
 
-- separating tuning from final model fitting
-- evaluating performance in a held-out dataset
-- reporting coefficient stability across folds
-- using sensitivity analyses for downstream associations
+-   separating tuning from final model fitting
+-   evaluating performance in a held-out dataset
+-   reporting coefficient stability across folds
+-   using sensitivity analyses for downstream associations
 
 # Building the MMS {#building-the-mms}
 
@@ -298,7 +369,11 @@ If the exposure of interest should first be adjusted for major confounders or co
 
 For a single-metabolite screening step before multivariable signature building, a helper can fit metabolite-wise models, apply multiple testing correction, and return both the filtered results and residuals.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Feature selection"
 # Example: residualize multiple target exposures against shared covariates
 residual_model_specs <- list(
   exposure_a = exposure_a ~ total_energy + covariate_1 + covariate_2 + covariate_3,
@@ -370,6 +445,7 @@ single_metabolite_analysis <- function(data, train_data, exposure_feature,
   )
 }
 ```
+:::
 
 ## Model training {#model-training}
 
@@ -377,7 +453,11 @@ The original project used ridge regression (`alpha = 0`) to derive signatures fo
 
 A set of reusable training helpers can simplify switching between regression and machine-learning models.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Model training"
 target_outcomes <- c(
   exposure_a = "exposure_a_residual",
   exposure_b = "exposure_b_residual",
@@ -462,6 +542,7 @@ train_knn_signature <- function(train_data, mode = "regression") {
     purrr::pluck("fit")
 }
 ```
+:::
 
 ## Score construction {#score-construction}
 
@@ -469,7 +550,11 @@ After the final models are fitted, the participant-level MMS scores can be gener
 
 A score-calculation helper can turn model coefficients into a sample-level weighted score after filtering to non-zero metabolite coefficients.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Score construction"
 testing_feature_matrix <- as.matrix(signature_testing_df[, feature_columns])
 
 predicted_signature_scores <- purrr::imap(
@@ -516,12 +601,17 @@ calculate_signature_score <- function(ids, df, coefficients) {
     dplyr::mutate(total_score = rowSums(dplyr::across(dplyr::all_of(selected_features))))
 }
 ```
+:::
 
 ## LASSO metabolite selection {#lasso-metabolite-selection}
 
 If the goal is sparse feature selection rather than retaining all metabolite predictors, the same workflow can be used with `alpha = 1`.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "LASSO metabolite selection"
 lasso_fit <- glmnet::cv.glmnet(
   x = training_feature_matrix,
   y = signature_training_df[["exposure_a_residual"]],
@@ -529,12 +619,17 @@ lasso_fit <- glmnet::cv.glmnet(
   nfolds = 10
 )
 ```
+:::
 
 ## Elastic net models {#elastic-net-models}
 
 Elastic net is useful when correlated metabolites should be partially retained while still allowing shrinkage and some variable selection.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Elastic net models"
 elastic_net_fit <- glmnet::cv.glmnet(
   x = training_feature_matrix,
   y = signature_training_df[["exposure_a_residual"]],
@@ -542,12 +637,17 @@ elastic_net_fit <- glmnet::cv.glmnet(
   nfolds = 10
 )
 ```
+:::
 
 ## Weighted metabolite scores {#weighted-metabolite-scores}
 
 The predicted values from the penalized model become the MMS score. These can then be standardized for interpretation per standard deviation.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Weighted metabolite scores"
 full_feature_matrix <- as.matrix(analysis_df[, feature_columns])
 
 all_signature_scores <- purrr::imap(
@@ -561,6 +661,7 @@ analysis_df <- dplyr::bind_cols(
 ) %>%
   mutate(across(starts_with("signature_score_"), scale, .names = "{.col}_sd"))
 ```
+:::
 
 # Model evaluation {#model-evaluation}
 
@@ -572,7 +673,11 @@ One simple validation step is to regress the standardized residualized exposure 
 
 Reusable testing helpers can return predictions and core regression metrics from fitted models.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "R2"
 evaluation_model_specs <- list(
   exposure_a = list(y = "exposure_a_residual_sd", x = "signature_score_exposure_a_sd"),
   exposure_b = list(y = "exposure_b_residual_sd", x = "signature_score_exposure_b_sd")
@@ -598,6 +703,7 @@ evaluation_results <- purrr::imap_dfr(evaluation_models, function(fit, signature
     )
 })
 ```
+:::
 
 ## RMSE {#rmse}
 
@@ -605,7 +711,11 @@ RMSE can be reported alongside `R^2` if prediction error is of interest.
 
 These metrics can also be returned directly by reusable testing helpers, which is convenient when comparing several model families.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "RMSE"
 rmse_value <- yardstick::rmse_vec(
   truth = signature_testing_results$exposure_a_residual_sd,
   estimate = signature_testing_results$signature_score_exposure_a_sd
@@ -680,6 +790,7 @@ test_cross_validated_model <- function(model, test_data, type = "regression") {
   }
 }
 ```
+:::
 
 ## ROC / AUC {#roc-auc}
 
@@ -687,7 +798,11 @@ If the signature is evaluated against a binary downstream outcome, ROC curves an
 
 For classification settings, testing helpers can provide confusion-matrix-based evaluation.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "ROC / AUC"
 roc_auc_result <- yardstick::roc_auc(
   data = downstream_analysis_df,
   truth = outcome_case_status,
@@ -727,15 +842,21 @@ test_knn_classification <- function(model, test_data) {
   )
 }
 ```
+:::
 
 ## Calibration {#calibration}
 
 Calibration is useful when the MMS is interpreted as a predictive score rather than only as an exposure biomarker.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Calibration"
 # Placeholder for calibration workflow
 # calibration_df <- compute_calibration(data = downstream_analysis_df, score = "signature_score_exposure_a_sd")
 ```
+:::
 
 Also include:
 
@@ -743,10 +864,15 @@ Also include:
 
 Permutation tests can be used when assessing whether predictive performance exceeds what would be expected by chance.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Permutation testing"
 # Placeholder for permutation-based validation
 # permuted_results <- run_permutation_test(training_feature_matrix, signature_training_df$exposure_a_residual)
 ```
+:::
 
 ## Cross-validation results {#cross-validation-results}
 
@@ -754,7 +880,11 @@ Cross-validation outputs can be summarized by storing fold-specific coefficients
 
 If you prefer a more abstract interface, the cross-validation helpers above can be used as a lightweight wrapper pair for repeated cross-validated training and testing.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Cross-validation results"
 coefficient_summary_list <- list()
 
 for (signature_name in names(target_outcomes)) {
@@ -784,6 +914,7 @@ for (signature_name in names(target_outcomes)) {
     left_join(feature_annotation_df, by = "feature_id")
 }
 ```
+:::
 
 # Robustness and reproducibility {#robustness-and-reproducibility}
 
@@ -793,7 +924,11 @@ Once the MMS scores are created, they can be carried into downstream epidemiolog
 
 The original project tested whether MMS-outcome associations were robust to alternative adjustment sets and interaction terms. A generic version is shown below for conditional logistic regression, but the same principle applies to other models.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Sensitivity analyses"
 downstream_model_formulas <- list(
   "Base-adjusted" = ~ covariate_1 + covariate_2 + strata(matching_set_id),
   "Fully-adjusted" = ~ covariate_1 + covariate_2 + covariate_3 + covariate_4 + strata(matching_set_id),
@@ -810,6 +945,7 @@ fit_conditional_model <- function(data, signature_name, model_label, rhs_formula
     dplyr::filter(term == predictor_name)
 }
 ```
+:::
 
 This is the point in the workflow where the MMS score leaves the pure prediction setting and becomes an epidemiological exposure variable for downstream association models.
 
@@ -817,7 +953,11 @@ This is the point in the workflow where the MMS score leaves the pure prediction
 
 Coefficient stability across cross-validation folds helps identify which metabolites consistently contribute to the signature.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Stability of metabolite selection"
 top_features_table <- dplyr::bind_rows(
   lapply(names(coefficient_summary_list), function(signature_name) {
     coefficient_summary_list[[signature_name]] %>%
@@ -828,32 +968,38 @@ top_features_table <- dplyr::bind_rows(
   arrange(desc(abs(median)), .by_group = TRUE) %>%
   slice_head(n = 30)
 ```
+:::
 
 ## Reproducibility across folds {#reproducibility-across-folds}
 
 For transparent reporting, it is useful to export coefficient summaries, downstream association tables, and figures derived from the same standardized workflow.
 
+::: {.callout-note .callout-code-example}
+## Example code
+
 ```{r, eval=FALSE}
+#| code-summary: "Reproducibility across folds"
 readr::write_csv(top_features_table, "results/signature_top_features.csv")
 readr::write_csv(evaluation_results, "results/signature_evaluation_results.csv")
 ```
+:::
 
 This generic structure can be adapted to:
 
-- dietary exposures
-- clinical biomarkers
-- disease risk signatures
-- survival outcomes
-- interaction and subgroup analyses
+-   dietary exposures
+-   clinical biomarkers
+-   disease risk signatures
+-   survival outcomes
+-   interaction and subgroup analyses
 
 The key idea is to keep the workflow modular: preprocess, split data, fit the MMS, validate the score, and then carry the standardized score into downstream epidemiological models.
 
 Some reusable helper patterns that fit naturally into this workflow are:
 
-- simulation helpers for teaching and examples
-- preprocessing wrappers
-- train/test splitting helpers
-- single-metabolite screening helpers
-- model-training helpers for elastic net, random forest, and k-nearest neighbors
-- score-calculation helpers
-- regression and classification testing helpers
+-   simulation helpers for teaching and examples
+-   preprocessing wrappers
+-   train/test splitting helpers
+-   single-metabolite screening helpers
+-   model-training helpers for elastic net, random forest, and k-nearest neighbors
+-   score-calculation helpers
+-   regression and classification testing helpers

@@ -9,3 +9,36 @@ li {
 .sidebar-header {
   display: none;
 }
+
+/* Grey callouts for workflow code examples */
+.callout.callout-note.callout-code-example {
+  border-left-color: #9ca3af;
+}
+
+.callout.callout-note.callout-code-example .callout-header {
+  background-color: #e5e7eb;
+}
+
+.callout.callout-note.callout-code-example .callout-body {
+  background-color: #f3f4f6;
+}
+
+.callout.callout-note.callout-code-example .callout-icon-container {
+  color: #6b7280;
+}
+
+.callout.callout-note.callout-strata-note {
+  border-left-color: #9ca3af;
+}
+
+.callout.callout-note.callout-strata-note .callout-header {
+  background-color: #e5e7eb;
+}
+
+.callout.callout-note.callout-strata-note .callout-body {
+  background-color: #f9fafb;
+}
+
+.callout.callout-note.callout-strata-note .callout-icon-container {
+  color: #6b7280;
+}

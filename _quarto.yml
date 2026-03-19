@@ -72,7 +72,7 @@ website:
                     href: notebooks/intro.qmd#reporting-and-reproducibility-expectations
       - section: "Analytical workflow"
         contents:
-          - text: "Data import"
+          - text: "Data import and preprocessing"
             href: notebooks/workflow.qmd#data-import
             contents:
               - text: "Data structure"
@@ -83,9 +83,6 @@ website:
                 href: notebooks/workflow.qmd#exposure-variables
               - text: "Outcome definitions"
                 href: notebooks/workflow.qmd#outcome-definitions
-          - text: "Data preprocessing"
-            href: notebooks/workflow.qmd#data-preprocessing
-            contents:
               - text: "Missing value handling"
                 href: notebooks/workflow.qmd#missing-value-handling
               - text: "Normalization"
