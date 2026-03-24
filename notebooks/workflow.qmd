@@ -28,76 +28,142 @@ Additional elements can be included depending on the study design, such as:
 
 -   metadata linking feature IDs to metabolite annotations.
 
-## Metabolomics platform {#metabolomics-platform}
+## Training and testing subsets {#training-and-testing-subsets}
 
-The metabolomics matrix should be clearly separated from participant-level metadata. In practice, this means defining which columns correspond to metabolite predictors and which columns correspond to exposures, covariates, and outcomes.
+At minimum, an MMS workflow requires both a **training dataset** and a **testing dataset**. These can be obtained in two ways:
 
-If you want a synthetic example for method development or teaching, a small simulation helper can be useful.
+-   by using two separate datasets (one for model training and the other for external validation), or by defining subsets of individuals within a single dataset that are reserved for testing. In both cases, the datasets or subsets must contain the same variables and be similarly structured, or
 
-::: {.callout-note .callout-code-example}
-## Example code
+-   by splitting a single dataset into training and testing subsets (e.g., random split).
 
-```{r, eval=FALSE}
-#| code-summary: "Metabolomics platform"
-# Example: keep a vector with the metabolite feature columns
-feature_columns <- colnames(analysis_df)[feature_start_col:ncol(analysis_df)]
-
-# Convert to model matrix
-feature_matrix <- as.matrix(analysis_df[, feature_columns])
-
-# Optional: synthetic example data
-# analysis_df <- simulate_example_data()
-```
-:::
-
-## Exposure variables {#exposure-variables}
-
-The target exposure can be a single variable or several related variables if multiple signatures are built in parallel.
+![](/images/train_test.png){fig-align="center" fig-cap="Training and testing dataset strategies" width="57%"}
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "Exposure variables"
-# Example target exposures for parallel MMS construction
-target_outcomes <- c(
-  exposure_a = "exposure_a_residual",
-  exposure_b = "exposure_b_residual",
-  exposure_c = "exposure_c_residual",
-  exposure_d = "exposure_d_residual"
-)
-```
-:::
-
-## Outcome definitions {#outcome-definitions}
-
-If the MMS will later be related to disease, mortality, or another endpoint, it is helpful to define those downstream datasets early so the training and testing workflow is explicit.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Outcome definitions"
-evaluation_ids <- evaluation_registry_df %>%
+#| code-summary: "User-defined training/test individuals"
+#| 
+  # Participants reserved for external or downstream evaluation
+evaluation_ids <- external_registry_df %>%
   dplyr::pull(participant_id)
+
+# Training population
+train_data <- data %>%
+  filter(!participant_id %in% evaluation_ids)
+
+# Testing or external evaluation population
+test_data <- data %>%
+  filter(participant_id %in% evaluation_ids)
+
+```
+
+```{r, eval=FALSE}
+#| code-summary: "Random training/test splitting helper"
+
+# Example helper-based split
+split_dataset <- function(data, training_prop = 0.7, strata = NULL) {
+  split_obj <- if (is.null(strata)) {
+    rsample::initial_split(data, prop = training_prop)
+  } else {
+    rsample::initial_split(data, prop = training_prop, strata = {{ strata }})
+  }
+
+  list(
+    split = split_obj,
+    train_data = rsample::training(split_obj),
+    test_data = rsample::testing(split_obj)
+  )
+}
+
+# Example use
+set.seed(123)
+
+data_split <- split_dataset(
+  data = dataset,
+  training_prop = 0.7
+)
+
+train_data <- data_split$train_data
+test_data  <- data_split$test_data
 ```
 :::
 
-Before fitting MMS models, the data typically undergo residualization, cleaning, and standardization steps.
+::: {.callout-note .callout-strata-note collapse="true"}
+## `strata`
 
-Typical metabolomics steps:
+This note refers to the optional `strata` argument inside `split_dataset()`.
 
-## Missing value handling {#missing-value-handling}
+Stratification helps keep the training and testing sets similar with respect to an important variable, usually the outcome or exposure grouping.This makes model training and evaluation more stable and more comparable. For example:
 
-Missing metabolite values should be addressed before model fitting, using a strategy aligned with the platform and study design.
+-   If your outcome is binary and rare, a purely random split might put too few cases in the test set.
+-   If your target has strong class imbalance, stratification preserves roughly the same proportion in both subsets.
 
-A compact preprocessing helper can wrap missingness filtering, imputation, log transformation, and normalization in one step.
+Use stratification when: - you have a categorical outcome like case/control - you have strong imbalance between groups - you want both train and test to represent the same population structure
+
+You usually do not need it when: - the dataset is large and well balanced - the outcome is continuous and you are doing a simple random split
+:::
+
+::: {.callout-note .callout-strata-note collapse="true"}
+## `training_prop = 0.7`
+
+This note refers to the optional `training_prop` argument inside `split_dataset()`.
+
+This argument defines the proportion of individuals kept in the training dataset.
+
+If you do not specify it, the default is `0.7`, meaning that 70% of individuals are assigned to the training dataset and the remaining 30% to the testing dataset.
+:::
+
+## Data wrangling {#data-wrangling}
+
+The data needs to go through a series of steps prior to using it to train and test the MMS. These normally are:
+
+-   missing value handling,
+
+-   imputation,
+
+-   normalization / scaling,
+
+-   transformation,
+
+-   batch correction (depending on the method),
+
+-   possible feature selection,
+
+-   variable organisation to be used for the downstream analyses.
+
+One point to remember is to treat these steps independently in the training and testing data to never let test data influence the preprocessing steps.
+
+### Missing value handling {#missing-value-handling}
+
+Missing metabolite values should be addressed before model fitting, using a strategy aligned with the study design.
+
+In a supervised MMS workflow:
+
+-   **predictors** such as metabolite features can be imputed
+
+-   **covariates** can often also be imputed, depending on the analysis plan
+
+-   **target exposure** is usually **not imputed**. The target exposure it what the model is trying to learn from. If you impute it you may casually add noise or bias to the supervised signal, make interpretation harder and create a signature driven by assumptions from the imputation model rather than the observed data. Therefore, rows with missing target values should be removed.\
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "Missing value handling"
+#| code-summary: "Remove rows with missing target"
+
+train_data <- train_data %>%
+  filter(!is.na(.data[[target_col]]))
+
+test_data <- test_data %>%
+  filter(!is.na(.data[[target_col]]))
+
+```
+:::
+
+### Imputation {#imputation}
+
+```{r, eval = FALSE}
 # Placeholder example
 analysis_df <- analysis_df %>%
   mutate(across(all_of(feature_columns), ~ ifelse(is.na(.x), median(.x, na.rm = TRUE), .x)))
@@ -147,7 +213,76 @@ preprocess_metabolomics_data <- function(raw_data, id_col, target_col, feature_s
   dplyr::bind_cols(extra_covariates, processed_data)
 }
 ```
+
+Organise datasets for subsequent analyses
+
+There are several ways to organise datasets for downstream analyses. For example, all variables can be combined into a single dataset, with predictors, covariates, and exposures specified during analysis. Alternatively, the data can be split into separate subsets by type.
+
+The key requirement is that, for the downstream analyses, the predictor matrix (e.g., metabolomics data) is clearly distinguished from exposures, covariates, and other participant-level metadata.
+
+In the workflow example below, I chose to split the data into two datasets: one containing the feature columns used to build the signature, and another containing exposures, outcomes, covariates, and related metadata. I found this structure more convenient, and the helper functions are built with it in mind.
+
+::: {.callout-note .callout-code-example}
+## Example code
+
+```{r, eval=FALSE}
+#| code-summary: "Variables organisation"
+# Example: define metabolite feature columns
+feature_columns <- colnames(analysis_df)[feature_start_col:ncol(analysis_df)]
+
+# Create a dataset with features only
+features_df <- analysis_df[, feature_columns, drop = FALSE]
+
+# Convert feature dataset to model matrix
+feature_matrix <- as.matrix(features_df)
+
+# Example: define non-feature variables
+exposure_columns <- c("exposure_1")               # replace with your exposure variable(s)
+outcome_columns  <- c("outcome_1", "outcome_2")  # replace with your outcome variable(s)
+covariate_columns <- c("age", "sex", "bmi")      # replace with your covariates
+id_columns <- c("participant_id")                # optional: participant IDs or other metadata
+
+# Create a dataset with participant-level metadata
+metadata_df <- analysis_df[, c(id_columns, exposure_columns, outcome_columns, covariate_columns), drop = FALSE]
+```
 :::
+
+## Exposure variables {#exposure-variables}
+
+The target exposure can be a single variable or several related variables if multiple signatures are built in parallel.
+
+::: {.callout-note .callout-code-example}
+## Example code
+
+```{r, eval=FALSE}
+#| code-summary: "Exposure variables"
+# Example target exposures for parallel MMS construction
+target_outcomes <- c(
+  exposure_a = "exposure_a_residual",
+  exposure_b = "exposure_b_residual",
+  exposure_c = "exposure_c_residual",
+  exposure_d = "exposure_d_residual"
+)
+```
+:::
+
+## Outcome definitions {#outcome-definitions}
+
+If the MMS will later be related to disease, mortality, or another endpoint, it is helpful to define those downstream datasets early so the training and testing workflow is explicit.
+
+::: {.callout-note .callout-code-example}
+## Example code
+
+```{r, eval=FALSE}
+#| code-summary: "Outcome definitions"
+evaluation_ids <- evaluation_registry_df %>%
+  dplyr::pull(participant_id)
+```
+:::
+
+Before fitting MMS models, the data typically undergo residualization, cleaning, and standardization steps.
+
+Typical metabolomics steps:
 
 ## Normalization {#normalization}
 
@@ -215,85 +350,6 @@ analysis_df <- analysis_df %>%
 # Study design & sample splitting {#study-design-sample-splitting}
 
 This section shows how to define training and testing populations in a reusable way.
-
-## Training vs test dataset {#training-vs-test-dataset}
-
-At minimum, an MMS workflow requires both a **training dataset** and a **testing dataset**. These can be obtained in two ways:
-
--   by using two separate datasets (one for model training and the other for external validation), or by defining subsets of individuals within a single dataset that are reserved for testing. In both cases, the datasets or subsets must contain the same variables and be similarly structured, or
-
--   by splitting a single dataset into training and testing subsets (e.g., random split).
-
-![](/images/train_test.png){fig-align="center" fig-cap="Training and testing dataset strategies" width="57%"}
-
-::: {.callout-note .callout-code-example}
-## Example code
-```{r, eval=FALSE}
-#| code-summary: "User-defined training/test individuals"
-#| 
-  # Participants reserved for external or downstream evaluation
-evaluation_ids <- external_registry_df %>%
-  dplyr::pull(participant_id)
-
-# Training population
-train_data <- data %>%
-  filter(!participant_id %in% evaluation_ids)
-
-# Testing or external evaluation population
-test_data <- data %>%
-  filter(participant_id %in% evaluation_ids)
-
-```
-
-```{r, eval=FALSE}
-#| code-summary: "Random training/test splitting helper"
-
-# Example helper-based split
-split_dataset <- function(data, training_prop = 0.7, strata = NULL) {
-  split_obj <- if (is.null(strata)) {
-    rsample::initial_split(data, prop = training_prop)
-  } else {
-    rsample::initial_split(data, prop = training_prop, strata = {{ strata }})
-  }
-
-  list(
-    split = split_obj,
-    train_data = rsample::training(split_obj),
-    test_data = rsample::testing(split_obj)
-  )
-}
-```
-:::
-
-::: {.callout-note .callout-strata-note collapse="true"}
-## `strata`
-
-This note refers to the optional `strata` argument inside `split_dataset()`.
-
-Stratification helps keep the training and testing sets similar with respect to an important variable, usually the outcome or exposure grouping.This makes model training and evaluation more stable and more comparable. For example:
-
--   If your outcome is binary and rare, a purely random split might put too few cases in the test set.
--   If your target has strong class imbalance, stratification preserves roughly the same proportion in both subsets.
-
-Use stratification when:
--   you have a categorical outcome like case/control
--   you have strong imbalance between groups
--   you want both train and test to represent the same population structure
-
-You usually do not need it when:
--   the dataset is large and well balanced
--   the outcome is continuous and you are doing a simple random split
-:::
-
-::: {.callout-note .callout-strata-note collapse="true"}
-## `training_prop = 0.7`
-
-This note refers to the optional `training_prop` argument inside `split_dataset()`.
-
-This argument defines the proportion of individuals kept in the training dataset.
-
-If you do not specify it, the default is `0.7`, meaning that 70% of individuals are assigned to the training dataset and the remaining 30% to the testing dataset.
-:::
 
 ## Cross-validation {#cross-validation}
 
