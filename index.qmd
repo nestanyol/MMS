@@ -9,7 +9,7 @@ This covers the use of multi-metabolite signatures (MMS) as an advanced analytic
 
 synthesize metabolite patterns that reflect specific exogenous exposures, specifically diet composition. It specifically targets on potential applications of MMSs as composite biomarkers to target and monitor dietary chronic disease prevention strategies.
 
-To understand methodologies for multi-metabolite singatures developing and facilitate a conceptual and practical framework to develop them
+To understand methodologies for multi-metabolite signatures developing and facilitate a conceptual and practical framework to develop them
 
 identify biomarkers consisting of multiple metabolites, associated to exposure outcomes, specifically dietary scores.
 
