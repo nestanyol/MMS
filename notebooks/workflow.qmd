@@ -199,9 +199,9 @@ The data needs to go through a series of steps prior to using it to train and te
 
 -   imputation,
 
--   normalization / scaling,
-
 -   transformation,
+
+-   normalization / scaling,
 
 -   batch correction (depending on the method),
 
@@ -299,6 +299,22 @@ test_data <- test_data %>%
 ```
 :::
 
+## Transformation (log scaling) {#transformation-log-scaling}
+
+Log transformation is often used to reduce skewness and stabilize variance.
+
+This is also built into the helper function above.
+
+::: {.callout-note .callout-code-example}
+## Example code
+
+```{r, eval=FALSE}
+#| code-summary: "Transformation (log scaling)"
+analysis_df <- analysis_df %>%
+  mutate(across(all_of(feature_columns), log1p))
+```
+:::
+
 **Normalization**
 
 In MMS development, normalization is used to make metabolite predictors more comparable before model training. Whether this step is needed depends on the metabolomics platform and on the preprocessing already performed upstream. In some datasets, major technical normalization has already been completed before analysis, so the main remaining step for MMS construction is to standardize features for modelling.
@@ -341,22 +357,6 @@ train_data <- train_data %>%
 
 test_data <- test_data %>%
   normalize(cols = all_of(feature_cols), reference_data = train_data)
-```
-:::
-
-## Transformation (log scaling) {#transformation-log-scaling}
-
-Log transformation is often used to reduce skewness and stabilize variance.
-
-This is also built into the helper function above.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Transformation (log scaling)"
-analysis_df <- analysis_df %>%
-  mutate(across(all_of(feature_columns), log1p))
 ```
 :::
 
