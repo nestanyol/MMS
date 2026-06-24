@@ -299,19 +299,124 @@ test_data <- test_data %>%
 ```
 :::
 
-## Transformation (log scaling) {#transformation-log-scaling}
+**Transformation**
 
-Log transformation is often used to reduce skewness and stabilize variance.
-
-This is also built into the helper function above.
+In MMS development, transformation is used to improve the distributional properties of metabolite features before model training, for example by reducing skewness, stabilizing variance, and limiting the influence of extreme values. Log transformation is commonly used for positive-valued metabolomics data, but other approaches such as inverse normal or Box-Cox may be more appropriate depending on the data distribution and whether features include zero or negative values. When transformation parameters are estimated from the data, they should be defined using the training dataset and then applied unchanged to the testing dataset to avoid information leakage.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "Transformation (log scaling)"
-analysis_df <- analysis_df %>%
-  mutate(across(all_of(feature_columns), log1p))
+#| code-summary: "Generic transformation helper"
+# Generic transformation helper for MMS metabolite features
+transform_features <- function(data,
+                               cols,
+                               method = c("log1p", "log", "sqrt", "boxcox", 
+                                          "inverse_normal", "none"),
+                               custom_function = NULL,
+                               offset = 1e-6) {
+  
+  # Check that the selected method is valid
+  method <- match.arg(method)
+  
+  # Select columns using tidyselect syntax
+  cols <- tidyselect::eval_select(
+    rlang::expr(c({{ cols }})),
+    data = data
+  )
+  cols <- names(cols)
+  
+  # Return unchanged data if no columns are selected or no transformation is requested
+  if (length(cols) == 0 || method == "none") {
+    return(data)
+  }
+  
+  # Inverse normal transformation
+  inverse_normal_transform <- function(x) {
+    r <- rank(x, na.last = "keep", ties.method = "average")
+    n <- sum(!is.na(x))
+    stats::qnorm((r - 0.5) / n)
+  }
+  
+  # Box-Cox transformation
+  boxcox_transform <- function(x) {
+    # Box-Cox requires strictly positive values
+    min_x <- min(x, na.rm = TRUE)
+    
+    if (min_x <= 0) {
+      x <- x + abs(min_x) + offset
+    }
+    
+    # Estimate lambda by maximum likelihood
+    lambda <- stats::optimize(
+      f = function(lambda) {
+        if (abs(lambda) < 1e-8) {
+          xt <- log(x)
+        } else {
+          xt <- (x^lambda - 1) / lambda
+        }
+        
+        -sum(
+          stats::dnorm(
+            xt,
+            mean = mean(xt, na.rm = TRUE),
+            sd = stats::sd(xt, na.rm = TRUE),
+            log = TRUE
+          ),
+          na.rm = TRUE
+        )
+      },
+      interval = c(-2, 2)
+    )$minimum
+    
+    if (abs(lambda) < 1e-8) {
+      log(x)
+    } else {
+      (x^lambda - 1) / lambda
+    }
+  }
+  
+  # Apply selected transformation to each selected feature
+  for (nm in cols) {
+    x <- data[[nm]]
+    
+    if (!is.null(custom_function)) {
+      data[[nm]] <- custom_function(x)
+      
+    } else if (method == "log1p") {
+      data[[nm]] <- log1p(x)
+      
+    } else if (method == "log") {
+      data[[nm]] <- log(x + offset)
+      
+    } else if (method == "sqrt") {
+      data[[nm]] <- sqrt(x)
+      
+    } else if (method == "inverse_normal") {
+      data[[nm]] <- inverse_normal_transform(x)
+      
+    } else if (method == "boxcox") {
+      data[[nm]] <- boxcox_transform(x)
+    }
+  }
+  
+  data
+}
+```
+
+```{r, eval=FALSE}
+#| code-summary: "Transformation in train and test data"
+train_data <- train_data %>%
+  transform_features(
+    cols = all_of(feature_cols),
+    method = "log1p"
+  )
+
+test_data <- test_data %>%
+  transform_features(
+    cols = all_of(feature_cols),
+    method = "log1p"
+  )
 ```
 :::
 
@@ -366,74 +471,145 @@ test_data <- test_data %>%
 
 # Building the MMS {#building-the-mms}
 
-This section contains a generic template based on the original analysis: residualize the target exposure, tune a penalized model, fit the signature, and generate participant-level scores.
+This section describes the core supervised MMS workflow. The aim is to train a model that predicts a target exposure from a panel of metabolite features and then use the model-predicted value as the participant-level multimetabolite signature. In this example, the target exposure may first be residualized against selected covariates, the MMS model is trained in the training dataset, and the resulting score is generated in the testing dataset or in another downstream analysis dataset.
 
-## Reusable helper functions {#reusable-helper-functions}
-
-The helper functions can live in a separate `R/` script, but they can also be documented directly in the Quarto workflow so the full MMS pipeline is visible in one place.
+**Reusable helper functions:** The helper functions can live in a separate `R/` script, but they can also be documented directly in the Quarto workflow so the full MMS pipeline is visible in one place. The helpers below are designed to keep the workflow modular: define features, residualize exposures if needed, train penalized models, generate MMS scores, standardize them using a reference dataset, and extract coefficients for interpretation.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "Reusable MMS helpers"
+#| code-summary: "Reusable helper function"
 
-sing_met_analysis <- function(
-    data,
-    exposure_feature,
-    start_metabolites,
-    confounders = NULL,
-    correction = NULL
-) {
-  metabolite_columns <- colnames(data)[start_metabolites:ncol(data)]
-  features <- c(exposure_feature, confounders)
-
-  output <- metabolite_columns %>%
-    furrr::future_map(~ {
-      model_formula <- stats::reformulate(features, response = .x)
-      stats::lm(model_formula, data = data) %>%
-        broom::tidy() %>%
-        dplyr::mutate(yvar = .x, .before = dplyr::everything())
-    }) %>%
-    purrr::list_rbind(names_to = "model_id")
-
-  if (length(correction)) {
-    output %>%
-      dplyr::mutate(p.value_corrected = stats::p.adjust(p.value, method = correction)) %>%
-      dplyr::filter(term == exposure_feature) %>%
-      dplyr::arrange(p.value_corrected)
-  } else {
-    output %>%
-      dplyr::filter(term == exposure_feature) %>%
-      dplyr::arrange(p.value)
+# Define metabolite feature columns safely.
+# Prefer explicit feature names over start_col:ncol(data) whenever possible.
+get_feature_columns <- function(data, feature_prefix = NULL, feature_cols = NULL) {
+  if (!is.null(feature_cols)) {
+    missing_cols <- setdiff(feature_cols, names(data))
+    if (length(missing_cols) > 0) {
+      stop("Some feature columns are missing from data: ",
+           paste(missing_cols, collapse = ", "))
+    }
+    return(feature_cols)
   }
+
+  if (!is.null(feature_prefix)) {
+    feature_cols <- grep(feature_prefix, names(data), value = TRUE)
+    if (length(feature_cols) == 0) {
+      stop("No feature columns matched the supplied feature_prefix.")
+    }
+    return(feature_cols)
+  }
+
+  stop("Provide either feature_cols or feature_prefix.")
 }
 
-train_model <- function(
-    train_data,
-    start_metabolites,
-    exposure_feature,
-    mixture = 0,
-    penalty_levels = 30,
-    mixture_levels = 1,
-    covariates = NULL,
-    folds = 10,
-    seed = 123
-) {
-  metabolite_columns <- colnames(train_data)[start_metabolites:ncol(train_data)]
-  predictors <- c(covariates, metabolite_columns)
+
+# Residualize one exposure against selected covariates.
+# The model should be fitted in the training data only.
+residualize_exposure <- function(train_data,
+                                 new_data = NULL,
+                                 exposure,
+                                 covariates,
+                                 suffix = "_residual") {
+  rhs <- paste(covariates, collapse = " + ")
+  formula_obj <- stats::as.formula(paste(exposure, "~", rhs))
+
+  residual_model <- stats::lm(formula_obj, data = train_data)
+
+  residual_name <- paste0(exposure, suffix)
+
+  train_out <- train_data %>%
+    dplyr::mutate("{residual_name}" := stats::residuals(residual_model))
+
+  if (is.null(new_data)) {
+    return(list(
+      train_data = train_out,
+      model = residual_model,
+      residual_name = residual_name
+    ))
+  }
+
+  # Residuals in new data are observed values minus expected values
+  # based on the model fitted in the training data.
+  new_out <- new_data %>%
+    dplyr::mutate(
+      "{residual_name}" := .data[[exposure]] -
+        stats::predict(residual_model, newdata = new_data)
+    )
+
+  list(
+    train_data = train_out,
+    new_data = new_out,
+    model = residual_model,
+    residual_name = residual_name
+  )
+}
+
+
+# Fit a single-metabolite screening model for each feature.
+# This can be used as an exploratory step, but it is not required before ridge MMS.
+single_metabolite_screen <- function(data,
+                                     exposure_feature,
+                                     feature_cols,
+                                     covariates = NULL,
+                                     correction = "BH") {
+  terms <- c(exposure_feature, covariates)
+
+  results <- purrr::map_dfr(feature_cols, function(feature) {
+    model_formula <- stats::reformulate(terms, response = feature)
+
+    stats::lm(model_formula, data = data) %>%
+      broom::tidy() %>%
+      dplyr::mutate(feature_id = feature, .before = 1)
+  })
+
+  results <- results %>%
+    dplyr::filter(term == exposure_feature)
+
+  if (!is.null(correction)) {
+    results <- results %>%
+      dplyr::mutate(p.value_corrected = stats::p.adjust(p.value, method = correction)) %>%
+      dplyr::arrange(p.value_corrected)
+  } else {
+    results <- results %>%
+      dplyr::arrange(p.value)
+  }
+
+  results
+}
+
+
+# Train one MMS model.
+# mixture = 0 gives ridge regression; mixture = 1 gives LASSO;
+# values between 0 and 1 give elastic net.
+train_mms_model <- function(train_data,
+                            exposure_feature,
+                            feature_cols,
+                            covariates = NULL,
+                            mixture = 0,
+                            penalty_range = c(-4, 1),
+                            penalty_levels = 50,
+                            folds = 10,
+                            seed = 123,
+                            normalize_predictors = TRUE) {
+  predictors <- c(covariates, feature_cols)
   model_formula <- stats::reformulate(predictors, response = exposure_feature)
 
-  recipe_obj <- recipes::recipe(model_formula, data = train_data) %>%
+  recipe_obj <- recipes::recipe(model_formula, data = train_data)
+
+  if (normalize_predictors) {
+    recipe_obj <- recipe_obj %>%
+      recipes::step_normalize(recipes::all_numeric_predictors())
+  }
+
+  recipe_obj <- recipe_obj %>%
     recipes::step_dummy(recipes::all_nominal_predictors()) %>%
     recipes::step_zv(recipes::all_predictors())
 
-  set.seed(seed)
-  cv_folds <- rsample::vfold_cv(train_data, v = folds)
-
   model_spec <- parsnip::linear_reg(
     penalty = tune::tune(),
-    mixture = tune::tune()
+    mixture = mixture
   ) %>%
     parsnip::set_engine("glmnet")
 
@@ -441,22 +617,28 @@ train_model <- function(
     workflows::add_recipe(recipe_obj) %>%
     workflows::add_model(model_spec)
 
+  set.seed(seed)
+  cv_folds <- rsample::vfold_cv(train_data, v = folds)
+
   tuning_grid <- dials::grid_regular(
-    dials::penalty(range = c(-3, 0)),
-    dials::mixture(range = c(0, 1)),
-    levels = c(penalty_levels, mixture_levels)
+    dials::penalty(range = penalty_range),
+    levels = penalty_levels
   )
 
   tuned_results <- tune::tune_grid(
     workflow_obj,
     resamples = cv_folds,
     grid = tuning_grid,
-    metrics = yardstick::metric_set(yardstick::rmse, yardstick::mae, yardstick::rsq)
+    metrics = yardstick::metric_set(
+      yardstick::rmse,
+      yardstick::mae,
+      yardstick::rsq
+    )
   )
 
   best_params <- tune::select_best(tuned_results, metric = "rmse")
   final_workflow <- tune::finalize_workflow(workflow_obj, best_params)
-  final_fit <- parsnip::fit(final_workflow, data = train_data)
+  final_fit <- generics::fit(final_workflow, data = train_data)
 
   list(
     final_fit = final_fit,
@@ -464,189 +646,230 @@ train_model <- function(
     metrics = tune::collect_metrics(tuned_results),
     best_params = best_params,
     folds = cv_folds,
-    metabolite_columns = metabolite_columns,
-    exposure_feature = exposure_feature
+    feature_cols = feature_cols,
+    covariates = covariates,
+    exposure_feature = exposure_feature,
+    mixture = mixture
   )
 }
 
-predict_train_model <- function(model_object, new_data) {
-  predict(model_object$final_fit, new_data = new_data) %>%
+
+# Generate participant-level MMS scores from a fitted model.
+predict_mms_score <- function(model_object, new_data, score_name = "mms_score") {
+  score <- stats::predict(model_object$final_fit, new_data = new_data) %>%
     dplyr::pull(.pred)
+
+  new_data %>%
+    dplyr::mutate("{score_name}" := score)
+}
+
+
+# Standardize a score using a reference dataset.
+# Use the training data as reference when scores must be comparable across datasets.
+standardize_from_reference <- function(data,
+                                       score_col,
+                                       reference_data = data,
+                                       new_col = paste0(score_col, "_sd")) {
+  score_mean <- mean(reference_data[[score_col]], na.rm = TRUE)
+  score_sd <- stats::sd(reference_data[[score_col]], na.rm = TRUE)
+
+  if (is.na(score_sd) || score_sd == 0) {
+    stop("The reference standard deviation is zero or missing.")
+  }
+
+  data %>%
+    dplyr::mutate("{new_col}" := (.data[[score_col]] - score_mean) / score_sd)
+}
+
+
+# Extract glmnet coefficients from a finalized tidymodels workflow.
+extract_mms_coefficients <- function(model_object) {
+  penalty_value <- model_object$best_params$penalty[[1]]
+
+  workflows::extract_fit_parsnip(model_object$final_fit) %>%
+    parsnip::extract_fit_engine() %>%
+    stats::coef(s = penalty_value) %>%
+    as.matrix() %>%
+    as.data.frame() %>%
+    tibble::rownames_to_column("feature_id") %>%
+    dplyr::rename(coefficient = 2) %>%
+    dplyr::filter(feature_id != "(Intercept)") %>%
+    dplyr::arrange(dplyr::desc(abs(coefficient)))
 }
 ```
 :::
 
-## Feature selection {#feature-selection}
+## Feature selection or exposure residualization {#feature-selection}
 
-If the exposure of interest should first be adjusted for major confounders or correlated dietary components, residualization can be used before signature training.
+Feature selection is optional and depends on the scientific goal. For ridge regression, all metabolite predictors are retained and coefficients are shrunk, so a separate metabolite-filtering step is usually not required. For LASSO or elastic net, feature selection is part of model fitting because some coefficients may be shrunk to zero.
 
-For a single-metabolite screening step before multivariable signature building, a helper can fit metabolite-wise models, apply multiple testing correction, and return both the filtered results and residuals.
+A common MMS step is not feature selection but **exposure residualization**. This is useful when the target exposure should represent variation independent of total energy intake, correlated dietary components, demographic characteristics, or other predefined covariates. To avoid leakage, residualization should be fitted in the training data and then applied to the testing data using the same residual model.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
 #| code-summary: "Feature selection"
-# Example: residualize multiple target exposures against shared covariates
-residual_model_specs <- list(
-  exposure_a = exposure_a ~ total_energy + covariate_1 + covariate_2 + covariate_3,
-  exposure_b = exposure_b ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a,
-  exposure_c = exposure_c ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a + exposure_b,
-  exposure_d = exposure_d ~ total_energy + covariate_1 + covariate_2 + covariate_3 + exposure_a + exposure_b
+#| 
+# Example: define metabolite feature columns
+feature_columns <- get_feature_columns(
+  data = signature_training_df,
+  feature_cols = feature_columns
 )
 
-residual_models <- purrr::map(
-  residual_model_specs,
-  ~ lm(.x, data = analysis_df)
+# Residualize the exposure using training data only
+residualized_exposure_a <- residualize_exposure(
+  train_data = signature_training_df,
+  new_data = signature_testing_df,
+  exposure = "exposure_a",
+  covariates = c("total_energy", "age", "sex", "bmi")
 )
 
-analysis_df <- analysis_df %>%
-  mutate(
-    exposure_a_residual = residuals(residual_models$exposure_a),
-    exposure_b_residual = residuals(residual_models$exposure_b),
-    exposure_c_residual = residuals(residual_models$exposure_c),
-    exposure_d_residual = residuals(residual_models$exposure_d)
-  )
+signature_training_df <- residualized_exposure_a$train_data
+signature_testing_df <- residualized_exposure_a$new_data
 
-# Example single-metabolite helper usage
-screening_results <- sing_met_analysis(
-  data = analysis_df,
+# Store the residualized exposure name for model training
+target_outcomes <- c(
+  exposure_a = residualized_exposure_a$residual_name
+)
+
+# Optional single-metabolite screening
+screening_results <- single_metabolite_screen(
+  data = signature_training_df,
   exposure_feature = "exposure_a_residual",
-  start_metabolites = feature_start_col,
-  confounders = c("age", "sex", "bmi"),
-  correction = "fdr"
+  feature_cols = feature_columns,
+  covariates = c("age", "sex", "bmi"),
+  correction = "BH"
 )
 ```
 :::
 
 ## Model training {#model-training}
 
-The original project used ridge regression (`alpha = 0`) to derive signatures for multiple related exposures. A helper-based workflow makes the tuning, final fit, and prediction steps easier to keep synchronized across signatures.
+In MMS development, several penalized regression approaches can be used depending on the goal of the signature. **Ridge regression** uses all available metabolite predictors while shrinking their coefficients, which can be useful when metabolites are highly correlated and the aim is to construct a stable multimetabolite score. **LASSO** encourages sparsity by shrinking some coefficients to zero, making it useful when the goal includes metabolite selection or a more parsimonious signature. **Elastic net** combines ridge and LASSO penalties, allowing correlated metabolites to be partly retained while still performing some variable selection.
+
+The choice between ridge, LASSO, and elastic net is controlled by the mixture parameter, also known as `alpha` in `glmnet`: `alpha = 0` corresponds to ridge regression, `alpha = 1` corresponds to LASSO, and values between 0 and 1 correspond to elastic net models. For any of these approaches, the penalty parameter should be tuned in the training data using cross-validation. The final MMS model is then fitted in the full training dataset using the selected penalty and applied to new data to generate participant-level MMS scores.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
 #| code-summary: "Model training"
+
 target_outcomes <- c(
   exposure_a = "exposure_a_residual",
   exposure_b = "exposure_b_residual",
-  exposure_c = "exposure_c_residual",
-  exposure_d = "exposure_d_residual"
+  exposure_c = "exposure_c_residual"
 )
 
-# Fit one penalized model per exposure
+# Fit one ridge MMS model per target exposure
 signature_models <- purrr::imap(
   target_outcomes,
-  ~ train_model(
+  ~ train_mms_model(
     train_data = signature_training_df,
-    start_metabolites = feature_start_col,
     exposure_feature = .x,
+    feature_cols = feature_columns,
+    covariates = NULL,
     mixture = 0,
-    penalty_levels = 30,
-    mixture_levels = 1,
+    penalty_levels = 50,
     folds = 10,
-    seed = 123
+    seed = 123,
+    normalize_predictors = TRUE
   )
 )
 
-best_lambdas <- purrr::map_dbl(signature_models, ~ .x$best_params$penalty[[1]])
-final_signature_models <- purrr::map(signature_models, "final_fit")
+# Store selected penalties
+best_lambdas <- purrr::map_dbl(
+  signature_models,
+  ~ .x$best_params$penalty[[1]]
+)
+
+# Collect cross-validation performance
+cv_metric_summary <- purrr::imap_dfr(
+  signature_models,
+  ~ .x$metrics %>%
+    dplyr::mutate(signature = .y, .before = 1)
+)
 ```
 :::
 
 ## Score construction {#score-construction}
 
-After the final models are fitted, the participant-level MMS scores can be generated for the testing subset or for the full dataset.
-
-A score-calculation helper can turn model coefficients into a sample-level weighted score after filtering to non-zero metabolite coefficients.
+The MMS score is the model-predicted value for each participant. In other words, once the penalized regression model has learned the weighted combination of metabolites that predicts the target exposure, the predicted value from that model becomes the participant-level MMS. The score can be generated in the testing dataset, the full study dataset, or an external validation dataset as long as the same preprocessing and model object are used.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
 #| code-summary: "Score construction"
-predicted_signature_scores <- purrr::imap(
-  signature_models,
-  ~ predict_train_model(.x, signature_testing_df)
-)
+# Generate MMS scores in the testing dataset
+signature_testing_results <- signature_testing_df
 
-signature_testing_results <- dplyr::bind_cols(
-  signature_testing_df,
-  as.data.frame(predicted_signature_scores)
-)
+for (signature_name in names(signature_models)) {
+  score_name <- paste0("signature_score_", signature_name)
 
-# Example coefficient-based score calculation helper
-calculate_signature_score <- function(ids, df, coefficients) {
-  coefficient_df <- data.frame(
-    metabolite = rownames(coefficients),
-    coefficient = as.numeric(coefficients)
+  signature_testing_results <- predict_mms_score(
+    model_object = signature_models[[signature_name]],
+    new_data = signature_testing_results,
+    score_name = score_name
   )
+}
 
-  coefficient_df <- coefficient_df %>%
-    dplyr::filter(metabolite != "(Intercept)") %>%
-    dplyr::filter(metabolite != "id") %>%
-    dplyr::filter(coefficient != 0)
+# Generate MMS scores in the full analysis dataset
+analysis_with_scores <- analysis_df
 
-  selected_features <- coefficient_df$metabolite
+for (signature_name in names(signature_models)) {
+  score_name <- paste0("signature_score_", signature_name)
 
-  weighted_score_matrix <- data.frame(
-    matrix(NA, nrow = nrow(df), ncol = length(selected_features))
+  analysis_with_scores <- predict_mms_score(
+    model_object = signature_models[[signature_name]],
+    new_data = analysis_with_scores,
+    score_name = score_name
   )
-
-  for (i in seq_along(selected_features)) {
-    feature_name <- selected_features[i]
-    feature_position <- which(coefficient_df$metabolite == feature_name)
-
-    weighted_score_matrix[, i] <- df %>%
-      dplyr::select(dplyr::all_of(feature_name)) %>%
-      dplyr::mutate(dplyr::across(dplyr::everything(), ~ .x * coefficient_df[feature_position, "coefficient"])) %>%
-      dplyr::pull(1)
-  }
-
-  colnames(weighted_score_matrix) <- selected_features
-
-  dplyr::bind_cols(ids, weighted_score_matrix) %>%
-    dplyr::mutate(total_score = rowSums(dplyr::across(dplyr::all_of(selected_features))))
 }
 ```
 :::
 
-## LASSO metabolite selection {#lasso-metabolite-selection}
+## Score standardization {#score-standardization}
 
-If the goal is sparse feature selection rather than retaining all metabolite predictors, the same workflow can be used with `alpha = 1`.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "LASSO metabolite selection"
-lasso_fit <- glmnet::cv.glmnet(
-  x = training_feature_matrix,
-  y = signature_training_df[["exposure_a_residual"]],
-  alpha = 1,
-  nfolds = 10
-)
-```
-:::
-
-## Elastic net models {#elastic-net-models}
-
-Elastic net is useful when correlated metabolites should be partially retained while still allowing shrinkage and some variable selection.
+MMS scores are often standardized so that downstream estimates are interpreted per one standard deviation of the signature. The reference distribution should be defined clearly. For internal validation, the testing set can be standardized within itself. For transportability or comparison across datasets, it is usually better to standardize using the training-set score distribution and apply the same mean and standard deviation to the testing or downstream dataset.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "Elastic net models"
-elastic_net_fit <- glmnet::cv.glmnet(
-  x = training_feature_matrix,
-  y = signature_training_df[["exposure_a_residual"]],
-  alpha = 0.5,
-  nfolds = 10
-)
+#| code-summary: "MMS score standardization"
+
+# First generate training scores to define the reference distribution
+signature_training_results <- signature_training_df
+
+for (signature_name in names(signature_models)) {
+  score_name <- paste0("signature_score_", signature_name)
+
+  signature_training_results <- predict_mms_score(
+    model_object = signature_models[[signature_name]],
+    new_data = signature_training_results,
+    score_name = score_name
+  )
+
+  signature_testing_results <- standardize_from_reference(
+    data = signature_testing_results,
+    score_col = score_name,
+    reference_data = signature_training_results,
+    new_col = paste0(score_name, "_sd")
+  )
+
+  analysis_with_scores <- standardize_from_reference(
+    data = analysis_with_scores,
+    score_col = score_name,
+    reference_data = signature_training_results,
+    new_col = paste0(score_name, "_sd")
+  )
+}
 ```
 :::
+
+##  {#lasso-metabolite-selection}
 
 ## Weighted metabolite scores {#weighted-metabolite-scores}
 
@@ -672,214 +895,149 @@ analysis_df <- dplyr::bind_cols(
 
 # Model evaluation {#model-evaluation}
 
-The original code evaluated whether the predicted MMS score reproduced the residualized target exposure in the held-out population.
+Model evaluation asks whether the MMS score reproduces the target exposure in data not used for model training. For continuous exposures, the main validation metrics are usually R\^2, RMSE, MAE, and the slope from regressing the observed or residualized exposure on the MMS score. If the MMS is later evaluated against a binary or time-to-event health outcome, that becomes a downstream epidemiological analysis rather than the primary MMS construction metric.
 
 ## R2 {#r2}
 
-One simple validation step is to regress the standardized residualized exposure on the standardized MMS score and extract `R^2`.
-
-Reusable testing helpers can return predictions and core regression metrics from fitted models.
+`R^2` quantifies the proportion of variation in the target exposure explained by the MMS score in the testing dataset. When both the target exposure and MMS score are standardized, the slope can also be interpreted as the expected SD difference in the target exposure per one SD higher MMS.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "R2"
-evaluation_model_specs <- list(
-  exposure_a = list(y = "exposure_a_residual_sd", x = "signature_score_exposure_a_sd"),
-  exposure_b = list(y = "exposure_b_residual_sd", x = "signature_score_exposure_b_sd")
-)
+#| code-summary: "R2 and regression-based validation"
 
-evaluation_models <- purrr::map(evaluation_model_specs, function(spec) {
-  lm(
-    formula = as.formula(paste(spec$y, "~", spec$x)),
-    data = signature_testing_results
-  )
-})
+evaluate_mms_regression <- function(data, truth, estimate, signature_name = NULL) {
+  eval_df <- data %>%
+    dplyr::select(
+      truth = dplyr::all_of(truth),
+      estimate = dplyr::all_of(estimate)
+    ) %>%
+    tidyr::drop_na()
 
-evaluation_results <- purrr::imap_dfr(evaluation_models, function(fit, signature_name) {
+  fit <- stats::lm(truth ~ estimate, data = eval_df)
+
   slope <- broom::tidy(fit, conf.int = TRUE) %>%
-    dplyr::filter(term != "(Intercept)")
+    dplyr::filter(term == "estimate")
+
   fit_summary <- broom::glance(fit)
 
-  slope %>%
-    mutate(
-      signature = signature_name,
-      r_squared = fit_summary$r.squared,
-      adj_r_sq = fit_summary$adj.r.squared
-    )
-})
+  tibble::tibble(
+    signature = signature_name,
+    n = nrow(eval_df),
+    beta = slope$estimate,
+    conf.low = slope$conf.low,
+    conf.high = slope$conf.high,
+    p.value = slope$p.value,
+    r_squared = fit_summary$r.squared,
+    adj_r_squared = fit_summary$adj.r.squared
+  )
+}
+
+evaluation_specs <- list(
+  exposure_a = list(
+    truth = "exposure_a_residual",
+    estimate = "signature_score_exposure_a"
+  ),
+  exposure_b = list(
+    truth = "exposure_b_residual",
+    estimate = "signature_score_exposure_b"
+  )
+)
+
+evaluation_results <- purrr::imap_dfr(
+  evaluation_specs,
+  ~ evaluate_mms_regression(
+    data = signature_testing_results,
+    truth = .x$truth,
+    estimate = .x$estimate,
+    signature_name = .y
+  )
+)
 ```
 :::
 
-## RMSE {#rmse}
+## RMSE and MAE {#rmse}
 
-RMSE can be reported alongside `R^2` if prediction error is of interest.
-
-These metrics can also be returned directly by reusable testing helpers, which is convenient when comparing several model families.
+RMSE and MAE summarize prediction error. RMSE penalizes larger errors more strongly, while MAE is easier to interpret as the average absolute difference between the observed exposure and the MMS-predicted exposure. These metrics are most interpretable when the target and score are on the same scale.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "RMSE"
-rmse_value <- yardstick::rmse_vec(
-  truth = signature_testing_results$exposure_a_residual_sd,
-  estimate = signature_testing_results$signature_score_exposure_a_sd
+#| code-summary: "Prediction error metrics"
+
+evaluate_mms_error <- function(data, truth, estimate, signature_name = NULL) {
+  eval_df <- data %>%
+    dplyr::select(
+      truth = dplyr::all_of(truth),
+      estimate = dplyr::all_of(estimate)
+    ) %>%
+    tidyr::drop_na()
+
+  tibble::tibble(
+    signature = signature_name,
+    n = nrow(eval_df),
+    rmse = yardstick::rmse_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    ),
+    mae = yardstick::mae_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    ),
+    rsq = yardstick::rsq_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    )
+  )
+}
+
+prediction_error_results <- purrr::imap_dfr(
+  evaluation_specs,
+  ~ evaluate_mms_error(
+    data = signature_testing_results,
+    truth = .x$truth,
+    estimate = .x$estimate,
+    signature_name = .y
+  )
 )
-
-# Example regression testing helpers
-test_linear_signature <- function(model, test_data) {
-  model_fit <- model$fit
-
-  predictions <- stats::predict(model_fit, new_data = test_data) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = .pred) %>%
-    dplyr::bind_cols(test_data)
-
-  model_coefficients <- broom::tidy(model_fit)
-  rmse_value <- caret::RMSE(predictions$predicted, predictions$target)
-
-  list(
-    prediction = predictions,
-    model_coefficients = model_coefficients,
-    rmse_value = rmse_value
-  )
-}
-
-test_random_forest_regression <- function(model, test_data) {
-  model_fit <- model$fit
-
-  predictions <- stats::predict(model_fit, new_data = test_data) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = .pred) %>%
-    dplyr::bind_cols(test_data)
-
-  list(
-    prediction = predictions,
-    model_importance = vip::vi(model_fit),
-    r_squared = caret::R2(predictions$predicted, predictions$target),
-    rmse_value = caret::RMSE(predictions$predicted, predictions$target)
-  )
-}
-
-test_knn_regression <- function(model, test_data) {
-  model_fit <- model$fit
-
-  predictions <- stats::predict(model_fit, new_data = test_data) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = .pred) %>%
-    dplyr::bind_cols(test_data)
-
-  list(
-    prediction = predictions,
-    r_squared = caret::R2(predictions$predicted, predictions$target),
-    rmse_value = caret::RMSE(predictions$predicted, predictions$target)
-  )
-}
-
-test_cross_validated_model <- function(model, test_data, type = "regression") {
-  predictions <- predict(model, newdata = test_data) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = value) %>%
-    dplyr::bind_cols(test_data)
-
-  if (type == "regression") {
-    list(
-      df = predictions,
-      RMSE = caret::RMSE(predictions$predicted, predictions$target)
-    )
-  } else {
-    list(
-      df = predictions,
-      confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
-    )
-  }
-}
 ```
 :::
 
 ## ROC / AUC {#roc-auc}
 
-If the signature is evaluated against a binary downstream outcome, ROC curves and AUC can be added.
-
-For classification settings, testing helpers can provide confusion-matrix-based evaluation.
+ROC curves and AUC are useful only when the MMS is evaluated against a binary outcome, such as case-control status. This is different from evaluating how well the MMS predicts the original continuous exposure. In this setting, the MMS is treated as an epidemiological predictor or biomarker, and the AUC quantifies discrimination between outcome groups.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "ROC / AUC"
-roc_auc_result <- yardstick::roc_auc(
+#| code-summary: "ROC / AUC for downstream binary outcomes"
+
+evaluate_binary_outcome_auc <- function(data, outcome, score, event_level = "second") {
+  data %>%
+    dplyr::select(
+      outcome = dplyr::all_of(outcome),
+      score = dplyr::all_of(score)
+    ) %>%
+    tidyr::drop_na() %>%
+    yardstick::roc_auc(
+      truth = outcome,
+      score,
+      event_level = event_level
+    )
+}
+
+roc_auc_result <- evaluate_binary_outcome_auc(
   data = downstream_analysis_df,
-  truth = outcome_case_status,
-  .pred = signature_score_exposure_a_sd
+  outcome = "outcome_case_status",
+  score = "signature_score_exposure_a_sd"
 )
-
-# Example classification testing helpers
-test_random_forest_classification <- function(model, test_data) {
-  model_fit <- model$fit
-
-  predictions <- stats::predict(model_fit, new_data = test_data) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = .pred_class) %>%
-    dplyr::bind_cols(test_data)
-
-  list(
-    prediction = predictions,
-    model_importance = vip::vi(model_fit),
-    confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
-  )
-}
-
-test_knn_classification <- function(model, test_data) {
-  model_fit <- model$fit
-
-  predictions <- dplyr::bind_cols(
-    stats::predict(model_fit, new_data = test_data),
-    stats::predict(model_fit, new_data = test_data, type = "prob")
-  ) %>%
-    dplyr::as_tibble() %>%
-    dplyr::rename(predicted = .pred_class) %>%
-    dplyr::bind_cols(test_data)
-
-  list(
-    prediction = predictions,
-    confusion_matrix = caret::confusionMatrix(predictions$predicted, test_data$target)
-  )
-}
 ```
 :::
 
-## Calibration {#calibration}
 
-Calibration is useful when the MMS is interpreted as a predictive score rather than only as an exposure biomarker.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Calibration"
-# Placeholder for calibration workflow
-# calibration_df <- compute_calibration(data = downstream_analysis_df, score = "signature_score_exposure_a_sd")
-```
-:::
-
-Also include:
-
-## Permutation testing {#permutation-testing}
-
-Permutation tests can be used when assessing whether predictive performance exceeds what would be expected by chance.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Permutation testing"
-# Placeholder for permutation-based validation
-# permuted_results <- run_permutation_test(training_feature_matrix, signature_training_df$exposure_a_residual)
-```
-:::
 
 ## Cross-validation results {#cross-validation-results}
 
