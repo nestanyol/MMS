@@ -618,8 +618,18 @@ div.csl-indent {
   <ul class="collapse">
   <li><a href="#pca" id="toc-pca" class="nav-link" data-scroll-target="#pca">PCA</a></li>
   <li><a href="#pls--pls-da" id="toc-pls--pls-da" class="nav-link" data-scroll-target="#pls--pls-da">PLS / PLS-DA</a></li>
-  <li><a href="#machine-learning" id="toc-machine-learning" class="nav-link" data-scroll-target="#machine-learning">Machine learning</a></li>
-  <li><a href="#scoring-frameworks" id="toc-scoring-frameworks" class="nav-link" data-scroll-target="#scoring-frameworks">Scoring frameworks</a></li>
+  </ul></li>
+  <li><a href="#machine-learning" id="toc-machine-learning" class="nav-link" data-scroll-target="#machine-learning">Machine learning</a>
+  <ul class="collapse">
+  <li><a href="#random-forest" id="toc-random-forest" class="nav-link" data-scroll-target="#random-forest">Random forest</a></li>
+  <li><a href="#gradient-boosting" id="toc-gradient-boosting" class="nav-link" data-scroll-target="#gradient-boosting">Gradient boosting</a></li>
+  <li><a href="#support-vector-machines" id="toc-support-vector-machines" class="nav-link" data-scroll-target="#support-vector-machines">Support vector machines</a></li>
+  </ul></li>
+  <li><a href="#scoring-frameworks" id="toc-scoring-frameworks" class="nav-link" data-scroll-target="#scoring-frameworks">Scoring frameworks</a>
+  <ul class="collapse">
+  <li><a href="#weighted-scores" id="toc-weighted-scores" class="nav-link" data-scroll-target="#weighted-scores">Weighted scores</a></li>
+  <li><a href="#metabolite-risk-scores" id="toc-metabolite-risk-scores" class="nav-link" data-scroll-target="#metabolite-risk-scores">Metabolite risk scores</a></li>
+  <li><a href="#reporting-and-reproducibility-expectations" id="toc-reporting-and-reproducibility-expectations" class="nav-link" data-scroll-target="#reporting-and-reproducibility-expectations">Reporting and reproducibility expectations</a></li>
   </ul></li>
   </ul></li>
   </ul>
@@ -774,52 +784,69 @@ Rather than single nutrients, metabolomics can characterize dietary patterns (e.
 <p>In nutritional metabolomics, PLS-based approaches have been used to derive metabolite patterns associated with dietary exposures and to identify discriminatory metabolic profiles linked to dietary patterns or disease risk. Because these components are optimized for prediction, they often provide more direct biological relevance to the exposure compared to unsupervised methods such as PCA.</p>
 <p>However, PLS and especially PLS-DA are prone to overfitting, particularly in high-dimensional settings with limited sample sizes. Therefore, rigorous validation strategies (such as cross-validation, permutation testing, and external validation) are essential to ensure robustness. Additionally, the interpretability of PLS-derived metabolite signatures depends on the stability of component loadings, as unstable weights may limit biological interpretation and reproducibility across studies.</p>
 </section>
-<section id="machine-learning" class="level3">
-<h3 class="anchored" data-anchor-id="machine-learning">Machine learning</h3>
-<section id="random-forest" class="level4">
-<h4 class="anchored" data-anchor-id="random-forest">Random forest</h4>
+</section>
+<section id="machine-learning" class="level2">
+<h2 class="anchored" data-anchor-id="machine-learning">Machine learning</h2>
+<p>Machine-learning methods can be used to construct multi-metabolite signatures when relationships between metabolites and the exposure or outcome may be complex or non-linear. These methods can incorporate a large number of predictors and may capture interactions that are not easily represented by linear regression models.</p>
+<section id="random-forest" class="level3">
+<h3 class="anchored" data-anchor-id="random-forest">Random forest</h3>
 <ul>
 <li><p>Captures non-linearities and interactions. The variable importance can suggest candidate metabolites.</p></li>
 <li><p>Needs carful tuning and validation; importance measures can be biased toward certain feature types.</p></li>
 </ul>
 </section>
-<section id="gradient-boosting" class="level4">
-<h4 class="anchored" data-anchor-id="gradient-boosting">Gradient boosting</h4>
+<section id="gradient-boosting" class="level3">
+<h3 class="anchored" data-anchor-id="gradient-boosting">Gradient boosting</h3>
 <ul>
 <li><p>Strong predictive performance; handles complex non-linear patterns.</p></li>
 <li><p>Similar caveats: tuning, calibration, and external validation are crucial.</p></li>
 </ul>
 </section>
-<section id="support-vector-machines" class="level4">
-<h4 class="anchored" data-anchor-id="support-vector-machines">Support vector machines</h4>
+<section id="support-vector-machines" class="level3">
+<h3 class="anchored" data-anchor-id="support-vector-machines">Support vector machines</h3>
 <ul>
 <li><p>Effective in high-dimensional settings; kernel choice controls non-linearity.</p></li>
 <li><p>Less straightforward interpretability; works best with standardized features and tuned hyperparameters.</p></li>
 </ul>
 </section>
 </section>
-<section id="scoring-frameworks" class="level3">
-<h3 class="anchored" data-anchor-id="scoring-frameworks">Scoring frameworks</h3>
-<section id="weighted-scores" class="level4">
-<h4 class="anchored" data-anchor-id="weighted-scores">Weighted scores</h4>
+<section id="scoring-frameworks" class="level2">
+<h2 class="anchored" data-anchor-id="scoring-frameworks">Scoring frameworks</h2>
+<p>After selecting the metabolites and estimating their contribution, the information must be combined into a score that can be calculated for each participant. The resulting score summarizes the metabolite profile into a single variable that can be used in validation and downstream epidemiological analyses.</p>
+<section id="weighted-scores" class="level3">
+<h3 class="anchored" data-anchor-id="weighted-scores">Weighted scores</h3>
+<p>A weighted multi-metabolite score is commonly calculated by multiplying each metabolite value by its corresponding model coefficient and then summing the resulting values:</p>
+<p>[ MMS_i = _{j=1}^{p} j X*{ij}]</p>
+<p>where (X_{ij}) is the standardized value of metabolite (j) for participant (i), and (_j) is the weight estimated by the model.</p>
+<p>Metabolites with larger coefficients contribute more strongly to the score. Positive and negative coefficients indicate the direction of their contribution.</p>
 </section>
-<section id="metabolite-risk-scores" class="level4">
-<h4 class="anchored" data-anchor-id="metabolite-risk-scores">Metabolite risk scores</h4>
+<section id="metabolite-risk-scores" class="level3">
+<h3 class="anchored" data-anchor-id="metabolite-risk-scores">Metabolite risk scores</h3>
+<p>A metabolite risk score combines several metabolites associated with a disease outcome or biological risk factor. It is conceptually similar to other composite risk scores, but it uses metabolite concentrations instead of genetic variants or clinical variables.</p>
+<p>The score can be examined in relation to disease incidence, clinical biomarkers or other health outcomes. Its predictive value should preferably be evaluated beyond established demographic, lifestyle and clinical risk factors.</p>
 </section>
-<section id="index-construction" class="level4">
-<h4 class="anchored" data-anchor-id="index-construction">Index construction</h4>
-</section>
-<section id="reporting-and-reproducibility-expectations" class="level4">
-<h4 class="anchored" data-anchor-id="reporting-and-reproducibility-expectations">Reporting and reproducibility expectations</h4>
-</section>
-<section id="section" class="level4">
-
+<section id="reporting-and-reproducibility-expectations" class="level3">
+<h3 class="anchored" data-anchor-id="reporting-and-reproducibility-expectations">Reporting and reproducibility expectations</h3>
+<p>Clear reporting is important to ensure that a multi-metabolite signature can be understood, reproduced and evaluated in other studies. Ideally, it should include:</p>
+<ul>
+<li><p>the study population and sample size,</p></li>
+<li><p>metabolomics measurement and quality-control procedures,</p></li>
+<li><p>variables preprocessing, transformation and standardization;</p></li>
+<li><p>handling of missing values and batch effects,</p></li>
+<li><p>the definition of the exposure or outcome,</p></li>
+<li><p>the method used to divide the data into training and validation sets,</p></li>
+<li><p>the model, tuning parameters and cross-validation procedure,</p></li>
+<li><p>the metabolites included in the final signature and their weights,</p></li>
+<li><p>scores and score calculatoin,</p></li>
+<li><p>measures of model performance and uncertainty,</p></li>
+<li><p>the software and packages used in the analysis.</p></li>
+</ul>
+<p>When possible, the analysis code and sufficient information for calculating the signature should be made available. External validation in an independent population is also recommended to assess whether the signature is reproducible and transferable across studies, populations and metabolomics platforms.</p>
 
 
 <!-- -->
 
 
-</section>
 </section>
 </section>
 </section>
@@ -1443,37 +1470,75 @@ Yang, T. C., L. S. Aucott, G. G. Duthie, and H. M. Macdonald. 2017. <span>“An 
 <span id="cb1-155"><a href="#cb1-155" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-156"><a href="#cb1-156" aria-hidden="true" tabindex="-1"></a>However, PLS and especially PLS-DA are prone to overfitting, particularly in high-dimensional settings with limited sample sizes. Therefore, rigorous validation strategies (such as cross-validation, permutation testing, and external validation) are essential to ensure robustness. Additionally, the interpretability of PLS-derived metabolite signatures depends on the stability of component loadings, as unstable weights may limit biological interpretation and reproducibility across studies.</span>
 <span id="cb1-157"><a href="#cb1-157" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-158"><a href="#cb1-158" aria-hidden="true" tabindex="-1"></a><span class="fu">### Machine learning {#machine-learning}</span></span>
+<span id="cb1-158"><a href="#cb1-158" aria-hidden="true" tabindex="-1"></a><span class="fu">## Machine learning {#machine-learning}</span></span>
 <span id="cb1-159"><a href="#cb1-159" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-160"><a href="#cb1-160" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Random forest {#random-forest}</span></span>
+<span id="cb1-160"><a href="#cb1-160" aria-hidden="true" tabindex="-1"></a>Machine-learning methods can be used to construct multi-metabolite signatures when relationships between metabolites and the exposure or outcome may be complex or non-linear. These methods can incorporate a large number of predictors and may capture interactions that are not easily represented by linear regression models.</span>
 <span id="cb1-161"><a href="#cb1-161" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-162"><a href="#cb1-162" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Captures non-linearities and interactions. The variable importance can suggest candidate metabolites.</span>
+<span id="cb1-162"><a href="#cb1-162" aria-hidden="true" tabindex="-1"></a><span class="fu">### Random forest {#random-forest}</span></span>
 <span id="cb1-163"><a href="#cb1-163" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-164"><a href="#cb1-164" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Needs carful tuning and validation; importance measures can be biased toward certain feature types.</span>
+<span id="cb1-164"><a href="#cb1-164" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Captures non-linearities and interactions. The variable importance can suggest candidate metabolites.</span>
 <span id="cb1-165"><a href="#cb1-165" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-166"><a href="#cb1-166" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Gradient boosting {#gradient-boosting}</span></span>
+<span id="cb1-166"><a href="#cb1-166" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Needs carful tuning and validation; importance measures can be biased toward certain feature types.</span>
 <span id="cb1-167"><a href="#cb1-167" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-168"><a href="#cb1-168" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Strong predictive performance; handles complex non-linear patterns.</span>
+<span id="cb1-168"><a href="#cb1-168" aria-hidden="true" tabindex="-1"></a><span class="fu">### Gradient boosting {#gradient-boosting}</span></span>
 <span id="cb1-169"><a href="#cb1-169" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-170"><a href="#cb1-170" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Similar caveats: tuning, calibration, and external validation are crucial.</span>
+<span id="cb1-170"><a href="#cb1-170" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Strong predictive performance; handles complex non-linear patterns.</span>
 <span id="cb1-171"><a href="#cb1-171" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-172"><a href="#cb1-172" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Support vector machines {#support-vector-machines}</span></span>
+<span id="cb1-172"><a href="#cb1-172" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Similar caveats: tuning, calibration, and external validation are crucial.</span>
 <span id="cb1-173"><a href="#cb1-173" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-174"><a href="#cb1-174" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Effective in high-dimensional settings; kernel choice controls non-linearity.</span>
+<span id="cb1-174"><a href="#cb1-174" aria-hidden="true" tabindex="-1"></a><span class="fu">### Support vector machines {#support-vector-machines}</span></span>
 <span id="cb1-175"><a href="#cb1-175" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-176"><a href="#cb1-176" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Less straightforward interpretability; works best with standardized features and tuned hyperparameters.</span>
+<span id="cb1-176"><a href="#cb1-176" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Effective in high-dimensional settings; kernel choice controls non-linearity.</span>
 <span id="cb1-177"><a href="#cb1-177" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-178"><a href="#cb1-178" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scoring frameworks {#scoring-frameworks}</span></span>
+<span id="cb1-178"><a href="#cb1-178" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>Less straightforward interpretability; works best with standardized features and tuned hyperparameters.</span>
 <span id="cb1-179"><a href="#cb1-179" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-180"><a href="#cb1-180" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Weighted scores {#weighted-scores}</span></span>
+<span id="cb1-180"><a href="#cb1-180" aria-hidden="true" tabindex="-1"></a><span class="fu">## Scoring frameworks {#scoring-frameworks}</span></span>
 <span id="cb1-181"><a href="#cb1-181" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-182"><a href="#cb1-182" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Metabolite risk scores {#metabolite-risk-scores}</span></span>
+<span id="cb1-182"><a href="#cb1-182" aria-hidden="true" tabindex="-1"></a>After selecting the metabolites and estimating their contribution, the information must be combined into a score that can be calculated for each participant. The resulting score summarizes the metabolite profile into a single variable that can be used in validation and downstream epidemiological analyses.</span>
 <span id="cb1-183"><a href="#cb1-183" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-184"><a href="#cb1-184" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Index construction {#index-construction}</span></span>
+<span id="cb1-184"><a href="#cb1-184" aria-hidden="true" tabindex="-1"></a><span class="fu">### Weighted scores {#weighted-scores}</span></span>
 <span id="cb1-185"><a href="#cb1-185" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-186"><a href="#cb1-186" aria-hidden="true" tabindex="-1"></a><span class="fu">#### Reporting and reproducibility expectations {#reporting-and-reproducibility-expectations}</span></span>
+<span id="cb1-186"><a href="#cb1-186" aria-hidden="true" tabindex="-1"></a>A weighted multi-metabolite score is commonly calculated by multiplying each metabolite value by its corresponding model coefficient and then summing the resulting values:</span>
 <span id="cb1-187"><a href="#cb1-187" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-188"><a href="#cb1-188" aria-hidden="true" tabindex="-1"></a><span class="fu">#### </span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
+<span id="cb1-188"><a href="#cb1-188" aria-hidden="true" tabindex="-1"></a><span class="sc">\[</span> MMS_i = \sum<span class="sc">\_</span>{j=1}\^{p} \beta*j X*{ij}<span class="sc">\]</span></span>
+<span id="cb1-189"><a href="#cb1-189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-190"><a href="#cb1-190" aria-hidden="true" tabindex="-1"></a>where (X<span class="sc">\_</span>{ij}) is the standardized value of metabolite (j) for participant (i), and (\beta<span class="sc">\_</span>j) is the weight estimated by the model.</span>
+<span id="cb1-191"><a href="#cb1-191" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-192"><a href="#cb1-192" aria-hidden="true" tabindex="-1"></a>Metabolites with larger coefficients contribute more strongly to the score. Positive and negative coefficients indicate the direction of their contribution.</span>
+<span id="cb1-193"><a href="#cb1-193" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-194"><a href="#cb1-194" aria-hidden="true" tabindex="-1"></a><span class="fu">### Metabolite risk scores {#metabolite-risk-scores}</span></span>
+<span id="cb1-195"><a href="#cb1-195" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-196"><a href="#cb1-196" aria-hidden="true" tabindex="-1"></a>A metabolite risk score combines several metabolites associated with a disease outcome or biological risk factor. It is conceptually similar to other composite risk scores, but it uses metabolite concentrations instead of genetic variants or clinical variables.</span>
+<span id="cb1-197"><a href="#cb1-197" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-198"><a href="#cb1-198" aria-hidden="true" tabindex="-1"></a>The score can be examined in relation to disease incidence, clinical biomarkers or other health outcomes. Its predictive value should preferably be evaluated beyond established demographic, lifestyle and clinical risk factors.</span>
+<span id="cb1-199"><a href="#cb1-199" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-200"><a href="#cb1-200" aria-hidden="true" tabindex="-1"></a><span class="fu">### Reporting and reproducibility expectations {#reporting-and-reproducibility-expectations}</span></span>
+<span id="cb1-201"><a href="#cb1-201" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-202"><a href="#cb1-202" aria-hidden="true" tabindex="-1"></a>Clear reporting is important to ensure that a multi-metabolite signature can be understood, reproduced and evaluated in other studies. Ideally, it should include:</span>
+<span id="cb1-203"><a href="#cb1-203" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-204"><a href="#cb1-204" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the study population and sample size,</span>
+<span id="cb1-205"><a href="#cb1-205" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-206"><a href="#cb1-206" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>metabolomics measurement and quality-control procedures,</span>
+<span id="cb1-207"><a href="#cb1-207" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-208"><a href="#cb1-208" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>variables preprocessing, transformation and standardization;</span>
+<span id="cb1-209"><a href="#cb1-209" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-210"><a href="#cb1-210" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>handling of missing values and batch effects,</span>
+<span id="cb1-211"><a href="#cb1-211" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-212"><a href="#cb1-212" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the definition of the exposure or outcome,</span>
+<span id="cb1-213"><a href="#cb1-213" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-214"><a href="#cb1-214" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the method used to divide the data into training and validation sets,</span>
+<span id="cb1-215"><a href="#cb1-215" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-216"><a href="#cb1-216" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the model, tuning parameters and cross-validation procedure,</span>
+<span id="cb1-217"><a href="#cb1-217" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-218"><a href="#cb1-218" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the metabolites included in the final signature and their weights,</span>
+<span id="cb1-219"><a href="#cb1-219" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-220"><a href="#cb1-220" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>scores and score calculatoin,</span>
+<span id="cb1-221"><a href="#cb1-221" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-222"><a href="#cb1-222" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>measures of model performance and uncertainty,</span>
+<span id="cb1-223"><a href="#cb1-223" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-224"><a href="#cb1-224" aria-hidden="true" tabindex="-1"></a><span class="ss">-   </span>the software and packages used in the analysis.</span>
+<span id="cb1-225"><a href="#cb1-225" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-226"><a href="#cb1-226" aria-hidden="true" tabindex="-1"></a>When possible, the analysis code and sufficient information for calculating the signature should be made available. External validation in an independent population is also recommended to assess whether the signature is reproducible and transferable across studies, populations and metabolomics platforms.</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 
