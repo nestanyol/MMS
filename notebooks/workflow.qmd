@@ -608,10 +608,10 @@ train_mms_model <- function(train_data,
     recipes::step_zv(recipes::all_predictors())
 
   model_spec <- parsnip::linear_reg(
-    penalty = tune::tune(),
-    mixture = mixture
-  ) %>%
-    parsnip::set_engine("glmnet")
+  penalty = tune::tune(),
+  mixture = 0
+) %>%
+  parsnip::set_engine("glmnet")
 
   workflow_obj <- workflows::workflow() %>%
     workflows::add_recipe(recipe_obj) %>%
@@ -621,9 +621,9 @@ train_mms_model <- function(train_data,
   cv_folds <- rsample::vfold_cv(train_data, v = folds)
 
   tuning_grid <- dials::grid_regular(
-    dials::penalty(range = penalty_range),
-    levels = penalty_levels
-  )
+  dials::penalty(range = c(-3, 0)),
+  levels = penalty_levels
+)
 
   tuned_results <- tune::tune_grid(
     workflow_obj,
@@ -893,21 +893,26 @@ analysis_df <- dplyr::bind_cols(
 ```
 :::
 
-# Model evaluation {#model-evaluation}
+# Model performance evaluation {#model-evaluation}
 
-Model evaluation asks whether the MMS score reproduces the target exposure in data not used for model training. For continuous exposures, the main validation metrics are usually R\^2, RMSE, MAE, and the slope from regressing the observed or residualized exposure on the MMS score. If the MMS is later evaluated against a binary or time-to-event health outcome, that becomes a downstream epidemiological analysis rather than the primary MMS construction metric.
+## Pediction performance {#prediction-performance}
 
-## R2 {#r2}
+Model evaluation evaluates whether the MMS score reproduces the target exposure in participants who were not used to train the model. For continuous exposures, useful validation metrics include `R^2`, RMSE, MAE, and the regression slope from a model of the observed or residualized exposure on the MMS score.
 
-`R^2` quantifies the proportion of variation in the target exposure explained by the MMS score in the testing dataset. When both the target exposure and MMS score are standardized, the slope can also be interpreted as the expected SD difference in the target exposure per one SD higher MMS.
+### R², calibration slope RMSE and MAE
+
+`R^2` quantifies the proportion of variation in the target exposure explained by the MMS score in the testing dataset. RMSE and MAE summarize prediction error: RMSE penalizes larger errors more strongly, while MAE represents the average absolute difference between the observed exposure and the MMS-predicted exposure. These metrics are most interpretable when the observed exposure and MMS score are on the same scale. When both variables are standardized, the regression slope can also be interpreted as the expected SD difference in the target exposure per one SD higher MMS.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
-#| code-summary: "R2 and regression-based validation"
+#| code-summary: "Model performance"
 
-evaluate_mms_regression <- function(data, truth, estimate, signature_name = NULL) {
+evaluate_mms_performance <- function(data,
+                                     truth,
+                                     estimate,
+                                     signature_name = NULL) {
   eval_df <- data %>%
     dplyr::select(
       truth = dplyr::all_of(truth),
@@ -925,14 +930,31 @@ evaluate_mms_regression <- function(data, truth, estimate, signature_name = NULL
   tibble::tibble(
     signature = signature_name,
     n = nrow(eval_df),
+
+    # Regression-based validation
     beta = slope$estimate,
     conf.low = slope$conf.low,
     conf.high = slope$conf.high,
     p.value = slope$p.value,
     r_squared = fit_summary$r.squared,
-    adj_r_squared = fit_summary$adj.r.squared
+    adj_r_squared = fit_summary$adj.r.squared,
+
+    # Prediction-error metrics
+    rmse = yardstick::rmse_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    ),
+    mae = yardstick::mae_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    ),
+    rsq_yardstick = yardstick::rsq_vec(
+      truth = eval_df$truth,
+      estimate = eval_df$estimate
+    )
   )
 }
+#| code-summary: "Evaluate multiple MMSs in the testing dataset"
 
 evaluation_specs <- list(
   exposure_a = list(
@@ -945,9 +967,9 @@ evaluation_specs <- list(
   )
 )
 
-evaluation_results <- purrr::imap_dfr(
+heldout_performance_results <- purrr::imap_dfr(
   evaluation_specs,
-  ~ evaluate_mms_regression(
+  ~ evaluate_mms_performance(
     data = signature_testing_results,
     truth = .x$truth,
     estimate = .x$estimate,
@@ -957,108 +979,51 @@ evaluation_results <- purrr::imap_dfr(
 ```
 :::
 
-## RMSE and MAE {#rmse}
-
-RMSE and MAE summarize prediction error. RMSE penalizes larger errors more strongly, while MAE is easier to interpret as the average absolute difference between the observed exposure and the MMS-predicted exposure. These metrics are most interpretable when the target and score are on the same scale.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Prediction error metrics"
-
-evaluate_mms_error <- function(data, truth, estimate, signature_name = NULL) {
-  eval_df <- data %>%
-    dplyr::select(
-      truth = dplyr::all_of(truth),
-      estimate = dplyr::all_of(estimate)
-    ) %>%
-    tidyr::drop_na()
-
-  tibble::tibble(
-    signature = signature_name,
-    n = nrow(eval_df),
-    rmse = yardstick::rmse_vec(
-      truth = eval_df$truth,
-      estimate = eval_df$estimate
-    ),
-    mae = yardstick::mae_vec(
-      truth = eval_df$truth,
-      estimate = eval_df$estimate
-    ),
-    rsq = yardstick::rsq_vec(
-      truth = eval_df$truth,
-      estimate = eval_df$estimate
-    )
-  )
-}
-
-prediction_error_results <- purrr::imap_dfr(
-  evaluation_specs,
-  ~ evaluate_mms_error(
-    data = signature_testing_results,
-    truth = .x$truth,
-    estimate = .x$estimate,
-    signature_name = .y
-  )
-)
-```
-:::
-
-## ROC / AUC {#roc-auc}
-
-ROC curves and AUC are useful only when the MMS is evaluated against a binary outcome, such as case-control status. This is different from evaluating how well the MMS predicts the original continuous exposure. In this setting, the MMS is treated as an epidemiological predictor or biomarker, and the AUC quantifies discrimination between outcome groups.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "ROC / AUC for downstream binary outcomes"
-
-evaluate_binary_outcome_auc <- function(data, outcome, score, event_level = "second") {
-  data %>%
-    dplyr::select(
-      outcome = dplyr::all_of(outcome),
-      score = dplyr::all_of(score)
-    ) %>%
-    tidyr::drop_na() %>%
-    yardstick::roc_auc(
-      truth = outcome,
-      score,
-      event_level = event_level
-    )
-}
-
-roc_auc_result <- evaluate_binary_outcome_auc(
-  data = downstream_analysis_df,
-  outcome = "outcome_case_status",
-  score = "signature_score_exposure_a_sd"
-)
-```
-:::
-
-
+If the MMS score and target exposure have been standardized using the same reference distribution, RMSE and MAE are expressed in SD units. This can make performance easier to compare across different exposure signatures. The standardization approach should be reported clearly, especially if MMS scores are later used in downstream epidemiological models.
 
 ## Cross-validation results {#cross-validation-results}
 
-Cross-validation outputs can be summarized by storing fold-specific coefficients and then computing medians and interquartile ranges.
+Cross-validation results summarize how the MMS model performed during training and how stable the fitted model was across resampling folds. These results are useful for reporting the selected penalty, comparing model families, and assessing whether the signature is driven by consistent metabolite contributions rather than by a small number of unstable features.
 
-If you prefer a more abstract interface, the cross-validation helpers above can be used as a lightweight wrapper pair for repeated cross-validated training and testing.
+For penalized regression models, the most relevant cross-validation outputs are usually the selected penalty parameter, the cross-validated performance metrics, and the distribution of metabolite coefficients across folds. Ridge regression usually retains all metabolite predictors with non-zero coefficients, so coefficient magnitude and rank stability are often more informative than selection frequency. In contrast, for LASSO or elastic net models, selection frequency can be interpreted as the proportion of folds in which each metabolite was retained with a non-zero coefficient.
 
 ::: {.callout-note .callout-code-example}
 ## Example code
 
 ```{r, eval=FALSE}
 #| code-summary: "Cross-validation results"
+summarize_cv_performance <- function(model_object, signature_name = NULL) {
+  model_object$metrics %>%
+    dplyr::filter(.metric %in% c("rmse", "mae", "rsq")) %>%
+    dplyr::mutate(
+      signature = signature_name,
+      selected_penalty = model_object$best_params$penalty[[1]],
+      mixture = model_object$mixture,
+      .before = 1
+    )
+}
+
+cv_performance_table <- purrr::imap_dfr(
+  signature_models,
+  ~ summarize_cv_performance(.x, signature_name = .y)
+)
+
+
 summarize_cv_coefficients <- function(model_object, feature_annotation_df = NULL) {
   recipe_obj <- workflows::extract_recipe(model_object$final_fit)
   penalty_value <- model_object$best_params$penalty[[1]]
-  mixture_value <- model_object$best_params$mixture[[1]]
   exposure_feature <- model_object$exposure_feature
+  mixture_value <- model_object$mixture
 
   fold_coefficients <- purrr::map(model_object$folds$splits, function(split) {
     fold_training_df <- rsample::analysis(split)
-    prepped_recipe <- recipes::prep(recipe_obj, training = fold_training_df, retain = TRUE)
+
+    prepped_recipe <- recipes::prep(
+      recipe_obj,
+      training = fold_training_df,
+      retain = TRUE
+    )
+
     baked_fold <- recipes::juice(prepped_recipe)
 
     x_fold <- baked_fold %>%
@@ -1073,120 +1038,34 @@ summarize_cv_coefficients <- function(model_object, feature_annotation_df = NULL
       alpha = mixture_value,
       lambda = penalty_value
     ) %>%
-      coef() %>%
+      stats::coef() %>%
       as.matrix()
   })
 
   coefficient_df <- do.call(cbind, fold_coefficients)
-  coefficient_df <- coefficient_df[rownames(coefficient_df) %in% model_object$metabolite_columns, , drop = FALSE]
+  colnames(coefficient_df) <- paste0("fold_", seq_len(ncol(coefficient_df)))
 
   coefficient_summary <- as.data.frame(coefficient_df) %>%
     tibble::rownames_to_column("feature_id") %>%
-    mutate(
-      median = apply(dplyr::pick(-feature_id), 1, quantile, probs = 0.5),
-      q1 = apply(dplyr::pick(-feature_id), 1, quantile, probs = 0.25),
-      q3 = apply(dplyr::pick(-feature_id), 1, quantile, probs = 0.75)
+    dplyr::filter(feature_id != "(Intercept)") %>%
+    dplyr::mutate(
+      median = apply(dplyr::pick(dplyr::starts_with("fold_")), 1, stats::median),
+      q1 = apply(dplyr::pick(dplyr::starts_with("fold_")), 1, stats::quantile, probs = 0.25),
+      q3 = apply(dplyr::pick(dplyr::starts_with("fold_")), 1, stats::quantile, probs = 0.75),
+      selection_frequency = rowMeans(dplyr::pick(dplyr::starts_with("fold_")) != 0)
     )
 
   if (!is.null(feature_annotation_df)) {
     coefficient_summary <- coefficient_summary %>%
-      left_join(feature_annotation_df, by = "feature_id")
+      dplyr::left_join(feature_annotation_df, by = "feature_id")
   }
 
   coefficient_summary
 }
 
-coefficient_summary_list <- purrr::map(
+coefficient_summary_list <- purrr::imap(
   signature_models,
   ~ summarize_cv_coefficients(.x, feature_annotation_df = feature_annotation_df)
 )
 ```
 :::
-
-# Robustness and reproducibility {#robustness-and-reproducibility}
-
-Once the MMS scores are created, they can be carried into downstream epidemiological models and sensitivity analyses.
-
-## Sensitivity analyses {#sensitivity-analyses}
-
-The original project tested whether MMS-outcome associations were robust to alternative adjustment sets and interaction terms. A generic version is shown below for conditional logistic regression, but the same principle applies to other models.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Sensitivity analyses"
-downstream_model_formulas <- list(
-  "Base-adjusted" = ~ covariate_1 + covariate_2 + strata(matching_set_id),
-  "Fully-adjusted" = ~ covariate_1 + covariate_2 + covariate_3 + covariate_4 + strata(matching_set_id),
-  "Sensitivity-adjusted" = ~ covariate_1 + covariate_2 + covariate_3 + covariate_4 + sensitivity_covariate + strata(matching_set_id)
-)
-
-fit_conditional_model <- function(data, signature_name, model_label, rhs_formula) {
-  predictor_name <- paste0("signature_score_", signature_name, "_sd")
-  rhs_string <- as.character(rhs_formula)[2]
-  full_formula <- as.formula(paste0("binary_outcome ~ ", predictor_name, " + ", rhs_string))
-
-  survival::clogit(full_formula, data = data, method = "efron", robust = TRUE) %>%
-    broom::tidy(conf.int = TRUE) %>%
-    dplyr::filter(term == predictor_name)
-}
-```
-:::
-
-This is the point in the workflow where the MMS score leaves the pure prediction setting and becomes an epidemiological exposure variable for downstream association models.
-
-## Stability of metabolite selection {#stability-of-metabolite-selection}
-
-Coefficient stability across cross-validation folds helps identify which metabolites consistently contribute to the signature.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Stability of metabolite selection"
-top_features_table <- dplyr::bind_rows(
-  lapply(names(coefficient_summary_list), function(signature_name) {
-    coefficient_summary_list[[signature_name]] %>%
-      mutate(signature = signature_name)
-  })
-) %>%
-  group_by(signature) %>%
-  arrange(desc(abs(median)), .by_group = TRUE) %>%
-  slice_head(n = 30)
-```
-:::
-
-## Reproducibility across folds {#reproducibility-across-folds}
-
-For transparent reporting, it is useful to export coefficient summaries, downstream association tables, and figures derived from the same standardized workflow.
-
-::: {.callout-note .callout-code-example}
-## Example code
-
-```{r, eval=FALSE}
-#| code-summary: "Reproducibility across folds"
-readr::write_csv(top_features_table, "results/signature_top_features.csv")
-readr::write_csv(evaluation_results, "results/signature_evaluation_results.csv")
-```
-:::
-
-This generic structure can be adapted to:
-
--   dietary exposures
--   clinical biomarkers
--   disease risk signatures
--   survival outcomes
--   interaction and subgroup analyses
-
-The key idea is to keep the workflow modular: preprocess, split data, fit the MMS, validate the score, and then carry the standardized score into downstream epidemiological models.
-
-Some reusable helper patterns that fit naturally into this workflow are:
-
--   simulation helpers for teaching and examples
--   preprocessing wrappers
--   train/test splitting helpers
--   single-metabolite screening helpers
--   model-training helpers for elastic net, random forest, and k-nearest neighbors
--   score-calculation helpers
--   regression and classification testing helpers

@@ -5,6 +5,10 @@ engine: knitr
 css: styles.css
 ---
 
+
+
+The pipeline covers the central MMS workflow as a tutorial-level overview: preprocessing, residualization, penalized model training, score construction, held-out validation, coefficient stability, and downstream epidemiological use.
+
 This covers the use of multi-metabolite signatures (MMS) as an advanced analytical approach to leverage metabolomics data to identify and
 
 synthesize metabolite patterns that reflect specific exogenous exposures, specifically diet composition. It specifically targets on potential applications of MMSs as composite biomarkers to target and monitor dietary chronic disease prevention strategies.
