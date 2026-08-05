@@ -5,26 +5,20 @@ engine: knitr
 css: styles.css
 ---
 
+From metabolites to models... and from code to a published website!
 
+This website introduces **multi-metabolite signatures (MMS)** as an analytical approach for identifying and combining metabolite patterns that reflect external exposures, with a particular focus on diet. These signatures can serve as composite biomarkers to support nutritional epidemiology research and the development and monitoring of dietary strategies for chronic disease prevention.
 
-The pipeline covers the central MMS workflow as a tutorial-level overview: preprocessing, residualization, penalized model training, score construction, held-out validation, coefficient stability, and downstream epidemiological use.
+The website provides a conceptual and practical introduction to building an MMS, covering the main steps from data preprocessing and study design to feature selection, model training, score construction, validation, stability assessment and downstream epidemiological analyses. Reproducible R code accompanies the different stages of the workflow.
 
-This covers the use of multi-metabolite signatures (MMS) as an advanced analytical approach to leverage metabolomics data to identify and
+This work was developed as part of the **Advanced Technologies in Biosciences** course during my doctoral studies at **Chalmers University of Technology**. It brings together work initiated during my Master’s thesis in **Bioinformatics and Biostatistics** with methods and code that I have learned and applied in **nutritional epidemiology projects** throughout my PhD.
 
-synthesize metabolite patterns that reflect specific exogenous exposures, specifically diet composition. It specifically targets on potential applications of MMSs as composite biomarkers to target and monitor dietary chronic disease prevention strategies.
+Developing this resource has strengthened both my theoretical and practical understanding of multi-metabolite signatures. It has also taught me how to build and publish a reproducible Quarto website, a useful way to make scientific methods, explanations and code more accessible and easier to share.
 
-To understand methodologies for multi-metabolite signatures developing and facilitate a conceptual and practical framework to develop them
+**Main learning outcomes:**
 
-identify biomarkers consisting of multiple metabolites, associated to exposure outcomes, specifically dietary scores.
+-   Understand the principles and applications of multi-metabolite signatures.
 
-Work competences:
+-   Gain hands-on experience in reproducible data analysis and coding.
 
--   Learn MMS methodologies.
-
-Complementary competences:
-
--   Hands-on experience in coding within a reproducible framework.
-
-<!-- -->
-
--   Practice on quarto website publishing
+-   Learn how to communicate and disseminate scientific methods and code through a Quarto website.
