@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://nestanyol.github.io/MMS/about.html</loc>
-    <lastmod>2026-03-19T22:44:34.635Z</lastmod>
-  </url>
-  <url>
-    <loc>https://nestanyol.github.io/MMS/index.html</loc>
-    <lastmod>2026-03-19T22:44:35.334Z</lastmod>
+    <loc>https://nestanyol.github.io/MMS/reports/final_report.html</loc>
+    <lastmod>2026-02-26T10:15:46.950Z</lastmod>
   </url>
   <url>
     <loc>https://nestanyol.github.io/MMS/notebooks/intro.html</loc>
-    <lastmod>2026-03-19T22:44:36.530Z</lastmod>
+    <lastmod>2026-03-17T18:16:44.641Z</lastmod>
+  </url>
+  <url>
+    <loc>https://nestanyol.github.io/MMS/about.html</loc>
+    <lastmod>2026-02-26T10:15:46.948Z</lastmod>
+  </url>
+  <url>
+    <loc>https://nestanyol.github.io/MMS/index.html</loc>
+    <lastmod>2026-08-05T14:59:31.340Z</lastmod>
   </url>
   <url>
     <loc>https://nestanyol.github.io/MMS/notebooks/workflow.html</loc>
-    <lastmod>2026-03-19T22:44:38.484Z</lastmod>
-  </url>
-  <url>
-    <loc>https://nestanyol.github.io/MMS/reports/final_report.html</loc>
-    <lastmod>2026-03-19T22:44:38.917Z</lastmod>
+    <lastmod>2026-08-05T14:59:30.006Z</lastmod>
   </url>
 </urlset>

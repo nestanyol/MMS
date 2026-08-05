@@ -42,3 +42,14 @@ li {
 .callout.callout-note.callout-strata-note .callout-icon-container {
   color: #6b7280;
 }
+
+/* Make level-3 headings visually lighter than higher-level section titles */
+.quarto-section-identifier + h3,
+.content h3,
+main h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: inherit;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
